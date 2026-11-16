@@ -1,0 +1,18 @@
+{
+  "document_id": "INV-EVAL-031",
+  "filename": "INV-EVAL-031.pdf",
+  "format": "pdf",
+  "category": "format_edge_case",
+  "expected_invoice_number": "INV-2026-EVAL031",
+  "expected_vendor": "GreenField Logistics",
+  "expected_po": "PO-1003",
+  "expected_invoice_amount": "46500.00",
+  "expected_gst": "7093.22",
+  "expected_line_item_count": 4,
+  "expected_account_ref": "DEMO-ACCT-1003",
+  "expected_discrepancy_types": [],
+  "expected_verification_decision": "APPROVE",
+  "expected_ocr_required": true,
+  "expected_suspicious_injection": false,
+  "notes": "Scanned rasterized image PDF with no native text, requiring RapidOCR fallback."
+}

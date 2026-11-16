@@ -1,0 +1,18 @@
+{
+  "document_id": "INV-EVAL-001",
+  "filename": "INV-EVAL-001.pdf",
+  "format": "pdf",
+  "category": "clean",
+  "expected_invoice_number": "INV-2026-EVAL001",
+  "expected_vendor": "Aster Office Supplies",
+  "expected_po": "PO-1001",
+  "expected_invoice_amount": "85000.00",
+  "expected_gst": "12966.10",
+  "expected_line_item_count": 5,
+  "expected_account_ref": "DEMO-ACCT-1001",
+  "expected_discrepancy_types": [],
+  "expected_verification_decision": "APPROVE",
+  "expected_ocr_required": false,
+  "expected_suspicious_injection": false,
+  "notes": "Standard clean invoice matching PO-1001 exactly."
+}

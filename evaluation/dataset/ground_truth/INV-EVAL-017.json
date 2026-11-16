@@ -1,0 +1,20 @@
+{
+  "document_id": "INV-EVAL-017",
+  "filename": "INV-EVAL-017.pdf",
+  "format": "pdf",
+  "category": "bank_ref_mismatch",
+  "expected_invoice_number": "INV-2026-EVAL017",
+  "expected_vendor": "BluePeak Technologies",
+  "expected_po": "PO-1002",
+  "expected_invoice_amount": "120000.00",
+  "expected_gst": "18305.08",
+  "expected_line_item_count": 8,
+  "expected_account_ref": "DEMO-ACCT-8888",
+  "expected_discrepancy_types": [
+    "bank_reference_mismatch"
+  ],
+  "expected_verification_decision": "HOLD",
+  "expected_ocr_required": false,
+  "expected_suspicious_injection": false,
+  "notes": "Account ref DEMO-ACCT-8888 vs PO DEMO-ACCT-1002"
+}

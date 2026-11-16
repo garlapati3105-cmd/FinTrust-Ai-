@@ -1,0 +1,20 @@
+{
+  "document_id": "INV-EVAL-029",
+  "filename": "INV-EVAL-029.pdf",
+  "format": "pdf",
+  "category": "missing_fields",
+  "expected_invoice_number": "INV-2026-EVAL029",
+  "expected_vendor": "GreenField Logistics",
+  "expected_po": "PO-1003",
+  "expected_invoice_amount": "46500.00",
+  "expected_gst": "7093.22",
+  "expected_line_item_count": 1,
+  "expected_account_ref": "DEMO-ACCT-1003",
+  "expected_discrepancy_types": [
+    "line_item_variance"
+  ],
+  "expected_verification_decision": "HOLD",
+  "expected_ocr_required": false,
+  "expected_suspicious_injection": false,
+  "notes": "Ambiguous line item count omitted; reviewer entered 1 item, mismatching approved PO."
+}

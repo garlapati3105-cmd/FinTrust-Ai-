@@ -1,0 +1,20 @@
+{
+  "document_id": "INV-EVAL-015",
+  "filename": "INV-EVAL-015.pdf",
+  "format": "pdf",
+  "category": "gst_mismatch",
+  "expected_invoice_number": "INV-2026-EVAL015",
+  "expected_vendor": "GreenField Logistics",
+  "expected_po": "PO-1003",
+  "expected_invoice_amount": "46500.00",
+  "expected_gst": "8500.00",
+  "expected_line_item_count": 4,
+  "expected_account_ref": "DEMO-ACCT-1003",
+  "expected_discrepancy_types": [
+    "gst_mismatch"
+  ],
+  "expected_verification_decision": "HOLD",
+  "expected_ocr_required": false,
+  "expected_suspicious_injection": false,
+  "notes": "GST 8500.00 vs PO 7093.22"
+}

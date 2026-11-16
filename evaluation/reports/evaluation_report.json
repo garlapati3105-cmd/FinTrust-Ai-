@@ -1,0 +1,75 @@
+{
+  "timestamp": "2026-11-16T06:28:54Z",
+  "dataset_summary": {
+    "total_documents": 31,
+    "formats": {
+      "pdf": 30,
+      "png": 1
+    },
+    "categories": {
+      "clean": 8,
+      "amount_mismatch": 4,
+      "gst_mismatch": 3,
+      "bank_ref_mismatch": 3,
+      "duplicate": 3,
+      "prompt_injection": 4,
+      "prompt_injection_benign": 1,
+      "missing_fields": 3,
+      "format_edge_case": 2
+    }
+  },
+  "performance_and_ocr": {
+    "total_extracted": 31,
+    "average_time_seconds": 1.1132,
+    "median_time_seconds": 0.0216,
+    "min_time_seconds": 0.0101,
+    "max_time_seconds": 17.5563,
+    "ocr_documents_tested": 2,
+    "ocr_success_count": 2,
+    "ocr_success_rate_percent": 100.0
+  },
+  "field_extraction_accuracy": {
+    "per_field": {
+      "invoice_number": 100.0,
+      "vendor_name": 100.0,
+      "po_number": 100.0,
+      "invoice_total": 100.0,
+      "gst_amount": 100.0,
+      "line_items": 100.0,
+      "invoice_bank_account_ref": 100.0
+    },
+    "overall_accuracy_percent": 100.0
+  },
+  "evidence_grounding_validation": {
+    "adversarial_cases_tested": 5,
+    "adversarial_cases_passed": 5,
+    "grounding_pass_rate_percent": 100.0
+  },
+  "prompt_injection_red_team": {
+    "malicious_injections_tested": 4,
+    "malicious_injections_detected": 4,
+    "detection_rate_percent": 100.0,
+    "benign_lookalikes_tested": 1,
+    "heuristic_false_positives": 1,
+    "false_positive_rate_percent": 100.0
+  },
+  "authoritative_verification": {
+    "total_decisions_tested": 31,
+    "correct_decisions": 31,
+    "decision_accuracy_percent": 100.0,
+    "clean_records_tested": 8,
+    "clean_records_approved": 8,
+    "false_hold_rate_percent": 0.0,
+    "duplicates_prevented": 3,
+    "amount_mismatches_held": 4,
+    "gst_mismatches_held": 3,
+    "bank_ref_mismatches_held": 3,
+    "missing_fields_held": 3
+  },
+  "live_ai_integration": {
+    "api_key_configured": false,
+    "model_configured": "google/gemini-2.0-flash-001",
+    "status": "SKIPPED_ABSENT_KEY",
+    "details": "OPENROUTER_API_KEY is not set in environment. In accordance with guidelines, live API call was skipped and no fake results were generated."
+  }
+}

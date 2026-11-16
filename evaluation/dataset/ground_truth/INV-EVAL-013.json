@@ -1,0 +1,20 @@
+{
+  "document_id": "INV-EVAL-013",
+  "filename": "INV-EVAL-013.pdf",
+  "format": "pdf",
+  "category": "gst_mismatch",
+  "expected_invoice_number": "INV-2026-EVAL013",
+  "expected_vendor": "Aster Office Supplies",
+  "expected_po": "PO-1001",
+  "expected_invoice_amount": "85000.00",
+  "expected_gst": "15300.00",
+  "expected_line_item_count": 5,
+  "expected_account_ref": "DEMO-ACCT-1001",
+  "expected_discrepancy_types": [
+    "gst_mismatch"
+  ],
+  "expected_verification_decision": "HOLD",
+  "expected_ocr_required": false,
+  "expected_suspicious_injection": false,
+  "notes": "GST 15300.00 vs PO 12966.10"
+}
