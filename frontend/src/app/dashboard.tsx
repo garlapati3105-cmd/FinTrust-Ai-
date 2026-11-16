@@ -117,7 +117,6 @@ const navigation: { label: Section; icon: IconName }[] = [
   { label: "Vendor Records", icon: "building" },
   { label: "Risk Monitoring", icon: "risk" },
   { label: "Audit Trail", icon: "audit" },
-  { label: "Settings", icon: "settings" },
 ];
 
 const defaultDashboard: DashboardData = {
@@ -208,8 +207,8 @@ function Icon({ name, className = "icon" }: { name: IconName; className?: string
     ),
     settings: (
       <>
-        <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" />
-        <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-1.6 2.77-.08-.02a1.7 1.7 0 0 0-1.78.48l-.06.07h-3.2l-.03-.09a1.7 1.7 0 0 0-1.25-1.2l-.1-.02-1.6-2.77.07-.08a1.7 1.7 0 0 0 .14-1.82l-.04-.09 1.6-2.77.1.01a1.7 1.7 0 0 0 1.62-.91l.05-.09h3.2l.05.09a1.7 1.7 0 0 0 1.62.91l.1-.01 1.6 2.77z" />
+        <circle cx="12" cy="12" r="3" />
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
       </>
     ),
     shield: (
@@ -1896,6 +1895,22 @@ export default function Dashboard() {
             </button>
           ))}
         </nav>
+
+        <div className="nav-divider" />
+
+        <div className="nav-caption">SYSTEM PREFERENCES</div>
+        <div className="sidebar-nav">
+          <button
+            aria-current={section === "Settings" ? "page" : undefined}
+            className={`nav-item ${section === "Settings" ? "nav-item-active" : ""}`}
+            onClick={() => setSection("Settings")}
+            type="button"
+          >
+            <Icon name="settings" />
+            <span>Settings</span>
+            {section === "Settings" && <span className="nav-active-mark" />}
+          </button>
+        </div>
 
         <div className="sidebar-footer">
           <div className="sidebar-note">

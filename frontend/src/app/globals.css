@@ -203,6 +203,12 @@ svg {
   gap: 4px;
 }
 
+.nav-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 14px 10px 10px;
+}
+
 .nav-item {
   position: relative;
   display: flex;
