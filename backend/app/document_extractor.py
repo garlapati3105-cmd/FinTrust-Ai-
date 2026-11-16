@@ -53,7 +53,11 @@ def _perform_image_ocr(image_bytes: bytes) -> tuple[str, bool]:
         result, _ = ocr(img_arr)
         if not result:
             return "", True
-        extracted_lines = [item[1].strip() for item in result if len(item) > 1 and item[1].strip()]
+        extracted_lines = [
+            str(item[1]).strip()
+            for item in result
+            if len(item) > 1 and item[1] is not None and str(item[1]).strip()
+        ]
         return "\n".join(extracted_lines), True
     except Exception:
         return "", False
@@ -66,12 +70,20 @@ def _perform_pixmap_ocr(pix: pymupdf.Pixmap) -> tuple[str, bool]:
 
     try:
         img_arr = np.frombuffer(pix.samples, dtype=np.uint8).reshape((pix.height, pix.width, pix.n))
-        if pix.n == 4:
+        if pix.n == 1:
+            img_arr = np.stack([img_arr[:, :, 0]] * 3, axis=-1)
+        elif pix.n == 2:
+            img_arr = np.stack([img_arr[:, :, 0]] * 3, axis=-1)
+        elif pix.n == 4:
             img_arr = img_arr[:, :, :3]
         result, _ = ocr(img_arr)
         if not result:
             return "", True
-        extracted_lines = [item[1].strip() for item in result if len(item) > 1 and item[1].strip()]
+        extracted_lines = [
+            str(item[1]).strip()
+            for item in result
+            if len(item) > 1 and item[1] is not None and str(item[1]).strip()
+        ]
         return "\n".join(extracted_lines), True
     except Exception:
         return "", False

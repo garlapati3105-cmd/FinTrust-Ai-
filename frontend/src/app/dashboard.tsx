@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type IconName =
   | "activity"
@@ -42,6 +42,8 @@ type CaseItem = {
 type AuditItem = {
   action: string;
   time: string;
+  decision?: string | null;
+  id?: number | null;
 };
 
 type DashboardData = {
@@ -119,16 +121,12 @@ const navigation: { label: Section; icon: IconName }[] = [
 
 const defaultDashboard: DashboardData = {
   summary: [
-    { label: "Invoices pending", value: "08", note: "Synthetic demo data", tone: "amber" },
-    { label: "Reviewed today", value: "06", note: "Synthetic demo data", tone: "green" },
-    { label: "Risk flags", value: "03", note: "Synthetic demo data", tone: "red" },
-    { label: "Vendor checks", value: "24", note: "Synthetic demo data", tone: "slate" },
+    { label: "Registered vendors", value: "—", note: "Loading...", tone: "slate" },
+    { label: "Approved purchase orders", value: "—", note: "Loading...", tone: "slate" },
+    { label: "Invoices processed", value: "—", note: "Loading...", tone: "slate" },
+    { label: "Pending reviews", value: "—", note: "Loading...", tone: "slate" },
   ],
-  cases: [
-    { id: "INV-2409", vendor: "Sharma Traders", status: "Needs review", risk: "High" },
-    { id: "INV-2318", vendor: "Urban Supplies", status: "Matched", risk: "Low" },
-    { id: "INV-2264", vendor: "Metro Packaging", status: "Needs review", risk: "Medium" },
-  ],
+  cases: [],
   audit_entries: [],
 };
 
@@ -499,6 +497,9 @@ function OverviewPage({
       c.risk.toLowerCase() === "medium",
   );
 
+  const registeredVendorsCount = summary.find((s) => s.label.toLowerCase().includes("vendor"))?.value ?? "03";
+  const approvedPosCount = summary.find((s) => s.label.toLowerCase().includes("purchase"))?.value ?? "03";
+
   return (
     <>
       <section className="workspace-summary">
@@ -618,7 +619,7 @@ function OverviewPage({
             <span className="soft-tag">Active Database</span>
           </div>
           <h3>Vendor Master & PO Baselines</h3>
-          <p>3 registered suppliers and 3 approved purchase orders available as authoritative ground truth for deterministic verification.</p>
+          <p>{registeredVendorsCount} registered suppliers and {approvedPosCount} approved purchase orders available as authoritative ground truth for deterministic verification.</p>
           <div style={{ marginTop: "12px", display: "inline-flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, color: "var(--green)" }}>
             <span>View Vendor Records</span>
             <Icon name="arrow-right" />
@@ -868,7 +869,8 @@ function VendorDetailsModal({
           </button>
           <button
             className="primary-button"
-            onClick={() => onVerifyVendor(vendor, associatedPos[0])}
+            onClick={() => onVerifyVendor(vendor, associatedPos.length > 0 ? associatedPos[0] : undefined)}
+            disabled={associatedPos.length === 0}
             type="button"
           >
             <Icon name="file" />
@@ -884,10 +886,12 @@ function AuditEventDetailsModal({
   event,
   onClose,
   onInspectInvoice,
+  allInvoices,
 }: {
   event: AuditEventRead;
   onClose: () => void;
   onInspectInvoice?: (invNum: string) => void;
+  allInvoices?: InvoiceRead[];
 }) {
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
@@ -958,12 +962,21 @@ function AuditEventDetailsModal({
             <button
               className="primary-button"
               onClick={() => {
-                onClose();
-                onInspectInvoice?.(`INV-${event.entity_id}`);
+                const relatedInvoice = allInvoices?.find((i) => i.id === event.entity_id);
+                const relatedInvoiceNum = relatedInvoice?.invoice_number;
+                if (relatedInvoiceNum) {
+                  onClose();
+                  onInspectInvoice?.(relatedInvoiceNum);
+                }
               }}
+              disabled={!allInvoices?.some((i) => i.id === event.entity_id)}
               type="button"
             >
-              <span>Inspect Invoice #{event.entity_id}</span>
+              <span>
+                {allInvoices?.find((i) => i.id === event.entity_id)
+                  ? `Inspect ${allInvoices.find((i) => i.id === event.entity_id)!.invoice_number}`
+                  : `Invoice #${event.entity_id}`}
+              </span>
               <Icon name="arrow-right" />
             </button>
           )}
@@ -1025,6 +1038,9 @@ function VendorRecordsPage({
       p.vendor_name.toLowerCase().includes(search.toLowerCase())
   );
 
+  const activeVendorsCount = vendors.filter((v) => v.is_active).length;
+  const activePercentage = vendors.length > 0 ? Math.round((activeVendorsCount / vendors.length) * 100) : 100;
+
   return (
     <section className="verification-workspace">
       {selectedVendor && (
@@ -1055,7 +1071,7 @@ function VendorRecordsPage({
         <div className="stat-card-modern">
           <span className="stat-label">Trusted Vendors</span>
           <span className="stat-val">{vendors.length.toString().padStart(2, "0")}</span>
-          <span className="stat-sub">100% active state</span>
+          <span className="stat-sub">{activeVendorsCount}/{vendors.length} active ({activePercentage}%)</span>
         </div>
         <div className="stat-card-modern">
           <span className="stat-label">Approved Purchase Orders</span>
@@ -1090,6 +1106,9 @@ function VendorRecordsPage({
           <div className="search-input-wrapper">
             <span className="search-icon-pos">🔍</span>
             <input
+              type="search"
+              id="vendor-search"
+              aria-label={activeTab === "vendors" ? "Search vendors, codes, or account references" : "Search purchase orders or vendors"}
               placeholder={activeTab === "vendors" ? "Search vendor name, code, or acct..." : "Search PO number or vendor..."}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1207,9 +1226,11 @@ function VendorRecordsPage({
 function AuditTrailPage({
   onOpenVerification,
   onInspectInvoice,
+  allInvoices,
 }: {
   onOpenVerification: () => void;
   onInspectInvoice?: (invNum: string) => void;
+  allInvoices?: InvoiceRead[];
 }) {
   const [auditEvents, setAuditEvents] = useState<AuditEventRead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1257,6 +1278,7 @@ function AuditTrailPage({
           event={selectedEvent}
           onClose={() => setSelectedEvent(null)}
           onInspectInvoice={onInspectInvoice}
+          allInvoices={allInvoices}
         />
       )}
 
@@ -1341,6 +1363,9 @@ function AuditTrailPage({
           <div className="search-input-wrapper">
             <span className="search-icon-pos">🔍</span>
             <input
+              type="search"
+              id="audit-search"
+              aria-label="Search audit event reasons, type, or entity ID"
               placeholder="Search event reasons, type, or entity ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -1389,7 +1414,7 @@ function AuditTrailPage({
                     <td>
                       <span
                         className={`status-badge ${
-                          ev.decision === "APPROVE" ? "approve" : ev.decision === "BLOCK" ? "hold" : "hold"
+                          ev.decision === "APPROVE" ? "approve" : ev.decision === "BLOCK" ? "block" : "hold"
                         }`}
                       >
                         {ev.decision ?? "NONE"}
@@ -1601,12 +1626,12 @@ function RiskMonitoringPage({
                     <td>{formatRupees(inv.gst_amount_paise)}</td>
                     <td>{inv.line_items}</td>
                     <td>
-                      <span className={`status-badge ${inv.risk_level === "low" ? "approve" : "hold"}`}>
+                      <span className={`status-badge ${inv.risk_level === "low" ? "approve" : inv.risk_level === "high" ? "block" : "hold"}`}>
                         {inv.risk_level?.toUpperCase() ?? "UNKNOWN"}
                       </span>
                     </td>
                     <td>
-                      <span className={`status-badge ${inv.decision === "APPROVE" ? "approve" : "hold"}`}>
+                      <span className={`status-badge ${inv.decision === "APPROVE" ? "approve" : inv.decision === "BLOCK" ? "block" : "hold"}`}>
                         {inv.decision ?? "NONE"}
                       </span>
                     </td>
@@ -1729,6 +1754,10 @@ export default function Dashboard() {
   const [connectionError, setConnectionError] = useState("");
   const [dashboardData, setDashboardData] = useState<DashboardData>(defaultDashboard);
   const [dashboardError, setDashboardError] = useState("");
+  const [allInvoices, setAllInvoices] = useState<InvoiceRead[]>([]);
+  const [allPOs, setAllPOs] = useState<PurchaseOrderRead[]>([]);
+  const [allAuditEvents, setAllAuditEvents] = useState<AuditEventRead[]>([]);
+  const [selectedAuditEvent, setSelectedAuditEvent] = useState<AuditEventRead | null>(null);
   const [prefillInvoice, setPrefillInvoice] = useState<{
     invoiceNumber?: string;
     vendorName?: string;
@@ -1740,14 +1769,16 @@ export default function Dashboard() {
   } | null>(null);
 
   const handleInspectInvoice = (invNum: string, vendorName?: string) => {
+    const invoice = allInvoices.find((i) => i.invoice_number === invNum);
+    const po = invoice ? allPOs.find((p) => p.id === invoice.po_id) : null;
     setPrefillInvoice({
       invoiceNumber: invNum,
-      vendorName: vendorName || "Aster Office Supplies",
-      poNumber: "PO-1001",
-      invoiceTotal: "85000.00",
-      gstAmount: "12966.10",
-      lineItems: "5",
-      bankAccountRef: "DEMO-ACCT-1001",
+      vendorName: vendorName || (po?.vendor_name ?? ""),
+      poNumber: po?.po_number ?? "",
+      invoiceTotal: invoice ? (invoice.invoice_total_paise / 100).toFixed(2) : "",
+      gstAmount: invoice ? (invoice.gst_amount_paise / 100).toFixed(2) : "",
+      lineItems: invoice ? String(invoice.line_items) : "",
+      bankAccountRef: invoice?.invoice_bank_account_ref ?? "",
     });
     setSection("Invoice Verification");
   };
@@ -1800,8 +1831,16 @@ export default function Dashboard() {
   useEffect(() => {
     const loadDashboard = async () => {
       try {
-        const payload = await fetchBackendJson<DashboardData>("http://localhost:8000/api/dashboard");
-        setDashboardData(payload);
+        const [dashboardPayload, invoicesPayload, posPayload, auditPayload] = await Promise.all([
+          fetchBackendJson<DashboardData>("http://localhost:8000/api/dashboard"),
+          fetchBackendJson<InvoiceRead[]>("http://localhost:8000/api/invoices").catch(() => []),
+          fetchBackendJson<PurchaseOrderRead[]>("http://localhost:8000/api/purchase-orders").catch(() => []),
+          fetchBackendJson<AuditEventRead[]>("http://localhost:8000/api/audit-events").catch(() => []),
+        ]);
+        setDashboardData(dashboardPayload);
+        setAllInvoices(invoicesPayload);
+        setAllPOs(posPayload);
+        setAllAuditEvents(auditPayload);
         setDashboardError("");
       } catch (error) {
         setDashboardError(
@@ -1941,6 +1980,16 @@ export default function Dashboard() {
               onOpenVendors={() => setSection("Vendor Records")}
               onOpenRisk={() => setSection("Risk Monitoring")}
               onInspectInvoice={handleInspectInvoice}
+              onSelectAuditEntry={(entry) => {
+                if (entry.id) {
+                  const found = allAuditEvents.find((e) => e.id === entry.id);
+                  if (found) {
+                    setSelectedAuditEvent(found);
+                    return;
+                  }
+                }
+                setSection("Audit Trail");
+              }}
               summary={dashboardData.summary}
               cases={dashboardData.cases}
               auditEntries={dashboardData.audit_entries}
@@ -1964,11 +2013,21 @@ export default function Dashboard() {
             <AuditTrailPage
               onOpenVerification={() => setSection("Invoice Verification")}
               onInspectInvoice={handleInspectInvoice}
+              allInvoices={allInvoices}
             />
           ) : (
             <SettingsPage
               theme={theme}
               onToggleTheme={() => setTheme((t) => (t === "light" ? "dark" : "light"))}
+            />
+          )}
+
+          {selectedAuditEvent && (
+            <AuditEventDetailsModal
+              event={selectedAuditEvent}
+              onClose={() => setSelectedAuditEvent(null)}
+              onInspectInvoice={handleInspectInvoice}
+              allInvoices={allInvoices}
             />
           )}
 
@@ -2235,100 +2294,104 @@ function InvoiceVerificationWorkspace({
     }
   };
 
-  const handleVerify = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    setLoading(true);
-    setError("");
+  const handleVerify = useCallback(
+    async (e?: React.FormEvent) => {
+      if (e) e.preventDefault();
+      if (loading) return;
+      setLoading(true);
+      setError("");
 
-    if (!invoiceNumber.trim()) {
-      setError("Invoice number is required.");
-      setLoading(false);
-      return;
-    }
-    if (!vendorName.trim()) {
-      setError("Vendor name is required.");
-      setLoading(false);
-      return;
-    }
-    if (!poNumber.trim()) {
-      setError("Purchase order number is required.");
-      setLoading(false);
-      return;
-    }
-
-    const totalNum = parseFloat(invoiceTotal);
-    if (isNaN(totalNum) || totalNum <= 0) {
-      setError("Invoice amount must be a strictly positive number.");
-      setLoading(false);
-      return;
-    }
-
-    const gstNum = parseFloat(gstAmount);
-    if (isNaN(gstNum) || gstNum < 0) {
-      setError("GST amount must be non-negative.");
-      setLoading(false);
-      return;
-    }
-
-    if (gstNum > totalNum) {
-      setError("GST amount cannot exceed the invoice total.");
-      setLoading(false);
-      return;
-    }
-
-    const itemsNum = parseInt(lineItems, 10);
-    if (isNaN(itemsNum) || itemsNum < 1) {
-      setError("Line items must be at least 1.");
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch("http://localhost:8000/api/verify-invoice", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          invoice_number: invoiceNumber.trim(),
-          vendor_name: vendorName.trim(),
-          po_number: poNumber.trim(),
-          invoice_total: totalNum,
-          gst_amount: gstNum,
-          line_items: itemsNum,
-          invoice_bank_account_ref: bankAccountRef.trim() || null,
-        }),
-      });
-
-      if (!response.ok) {
-        let errMessage = `Verification request failed with HTTP ${response.status}.`;
-        try {
-          const errData = await response.json();
-          if (errData.detail) {
-            if (Array.isArray(errData.detail)) {
-              errMessage = errData.detail
-                .map((d: { msg?: string; loc?: string[] }) => d.msg || JSON.stringify(d))
-                .join("; ");
-            } else if (typeof errData.detail === "string") {
-              errMessage = errData.detail;
-            }
-          }
-        } catch {
-          // Default error message
-        }
-        throw new Error(errMessage);
+      if (!invoiceNumber.trim()) {
+        setError("Invoice number is required.");
+        setLoading(false);
+        return;
+      }
+      if (!vendorName.trim()) {
+        setError("Vendor name is required.");
+        setLoading(false);
+        return;
+      }
+      if (!poNumber.trim()) {
+        setError("Purchase order number is required.");
+        setLoading(false);
+        return;
       }
 
-      const payload = (await response.json()) as VerificationResult;
-      setVerification(payload);
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Unable to complete invoice verification.",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
+      const totalNum = parseFloat(invoiceTotal);
+      if (isNaN(totalNum) || totalNum <= 0) {
+        setError("Invoice amount must be a strictly positive number.");
+        setLoading(false);
+        return;
+      }
+
+      const gstNum = parseFloat(gstAmount);
+      if (isNaN(gstNum) || gstNum < 0) {
+        setError("GST amount must be non-negative.");
+        setLoading(false);
+        return;
+      }
+
+      if (gstNum > totalNum) {
+        setError("GST amount cannot exceed the invoice total.");
+        setLoading(false);
+        return;
+      }
+
+      const itemsNum = parseInt(lineItems, 10);
+      if (isNaN(itemsNum) || itemsNum < 1) {
+        setError("Line items must be at least 1.");
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await fetch("http://localhost:8000/api/verify-invoice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            invoice_number: invoiceNumber.trim(),
+            vendor_name: vendorName.trim(),
+            po_number: poNumber.trim(),
+            invoice_total: totalNum,
+            gst_amount: gstNum,
+            line_items: itemsNum,
+            invoice_bank_account_ref: bankAccountRef.trim() || null,
+          }),
+        });
+
+        if (!response.ok) {
+          let errMessage = `Verification request failed with HTTP ${response.status}.`;
+          try {
+            const errData = await response.json();
+            if (errData.detail) {
+              if (Array.isArray(errData.detail)) {
+                errMessage = errData.detail
+                  .map((d: { msg?: string; loc?: string[] }) => d.msg || JSON.stringify(d))
+                  .join("; ");
+              } else if (typeof errData.detail === "string") {
+                errMessage = errData.detail;
+              }
+            }
+          } catch {
+            // Default error message
+          }
+          throw new Error(errMessage);
+        }
+
+        const payload = (await response.json()) as VerificationResult;
+        setVerification(payload);
+      } catch (requestError) {
+        setError(
+          requestError instanceof Error
+            ? requestError.message
+            : "Unable to complete invoice verification.",
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [invoiceNumber, vendorName, poNumber, invoiceTotal, gstAmount, lineItems, bankAccountRef, loading],
+  );
 
   const findings = verification?.findings ?? [];
 
@@ -2342,7 +2405,7 @@ function InvoiceVerificationWorkspace({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [invoiceNumber, vendorName, poNumber, invoiceTotal, gstAmount, lineItems, bankAccountRef]);
+  }, [handleVerify]);
 
   // Resolve trusted database PO and Vendor records
   const trimmedPo = poNumber.trim().toUpperCase();
@@ -2394,7 +2457,7 @@ function InvoiceVerificationWorkspace({
   const approvedGstRupees = matchedPO ? matchedPO.approved_gst_paise / 100 : verification?.approved_gst ?? null;
   const approvedItemsCount = matchedPO ? matchedPO.approved_line_items : verification?.approved_line_items ?? null;
   const trustedVendorName = matchedPO ? matchedPO.vendor_name : verification?.vendor_name ?? null;
-  const trustedBankRef = matchedVendor?.bank_account_ref ?? (matchedPO ? "DEMO-ACCT-1001" : null);
+  const trustedBankRef = matchedVendor?.bank_account_ref ?? null;
 
   const amountVariance = approvedTotalRupees != null ? parsedInvoiceTotal - approvedTotalRupees : null;
   const gstVariance = approvedGstRupees != null ? parsedGstAmount - approvedGstRupees : null;
@@ -2860,10 +2923,10 @@ function InvoiceVerificationWorkspace({
             <button
               className="action-button"
               type="submit"
-              disabled={loading}
+              disabled={loading || loadingBaselines}
               style={{ marginTop: "10px", width: "100%" }}
             >
-              {loading ? "Verifying against server..." : "Review and Verify Invoice"}
+              {loadingBaselines ? "Loading trusted baselines..." : loading ? "Verifying against server..." : "Review and Verify Invoice"}
             </button>
             <div style={{ textAlign: "center", fontSize: "11px", color: "var(--muted)", marginTop: "4px" }}>
               Press <strong>Ctrl+Enter</strong> to verify quickly

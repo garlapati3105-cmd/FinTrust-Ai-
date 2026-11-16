@@ -65,6 +65,7 @@ class VerificationFinding(BaseModel):
 
 class InvoiceVerificationResponse(BaseModel):
     decision: str
+    status: str = ""
     risk_level: str
     findings: list[VerificationFinding]
     invoice_id: int | None = None

@@ -54,9 +54,10 @@ def _hold_response(
     risk_level: str = "high",
     po_number: str | None = None,
     audit_event_id: int | None = None,
+    decision: str = "HOLD",
 ) -> dict[str, Any]:
     return {
-        "decision": "HOLD",
+        "decision": decision,
         "status": "Review required",
         "risk_level": risk_level,
         "findings": [finding],
