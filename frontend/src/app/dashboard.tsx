@@ -300,7 +300,13 @@ function Brand() {
   );
 }
 
-function ConnectionBadge({ state }: { state: ConnectionState }) {
+function ConnectionBadge({
+  state,
+  onRefresh,
+}: {
+  state: ConnectionState;
+  onRefresh?: () => void;
+}) {
   const label: Record<ConnectionState, string> = {
     idle: "Not checked",
     loading: "Checking",
@@ -309,12 +315,20 @@ function ConnectionBadge({ state }: { state: ConnectionState }) {
   };
 
   return (
-    <div className={`connection-badge connection-${state}`} aria-live="polite">
+    <button
+      className={`connection-badge connection-${state}`}
+      aria-label={`Backend connection: ${label[state]}. Click to refresh.`}
+      title="Click to check connection"
+      onClick={onRefresh}
+      disabled={state === "loading"}
+      type="button"
+      style={{ cursor: onRefresh ? "pointer" : "default" }}
+    >
       <span className="connection-dot" />
       <span>Backend</span>
       <span className="connection-divider" />
       <span>{label[state]}</span>
-    </div>
+    </button>
   );
 }
 
@@ -1918,20 +1932,7 @@ export default function Dashboard() {
             <strong>{section}</strong>
           </div>
           <div className="topbar-tools">
-            <ConnectionBadge state={connection} />
-            <button
-              aria-label="Check System Connection"
-              className="connection-button"
-              disabled={connection === "loading"}
-              onClick={checkConnection}
-              type="button"
-            >
-              <Icon
-                name={connection === "loading" ? "loader" : "activity"}
-                className={`icon ${connection === "loading" ? "spin" : ""}`}
-              />
-              <span>{connection === "loading" ? "Checking..." : "Check System Connection"}</span>
-            </button>
+            <ConnectionBadge state={connection} onRefresh={checkConnection} />
           </div>
         </header>
 
