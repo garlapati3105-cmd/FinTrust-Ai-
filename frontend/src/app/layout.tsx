@@ -2,9 +2,14 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "FinTrust AI | Overview",
+  title: "FinTrust AI | Financial Evidence Workspace",
   description:
-    "Evidence verification and fraud prevention for Indian MSMEs.",
+    "Evidence verification, PO-reconciliation, and fraud prevention for Indian MSMEs.",
+  icons: {
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
 };
 
 export default function RootLayout({

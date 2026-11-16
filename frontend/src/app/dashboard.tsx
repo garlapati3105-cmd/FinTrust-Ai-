@@ -243,11 +243,56 @@ function Icon({ name, className = "icon" }: { name: IconName; className?: string
   );
 }
 
+function BrandMark({ className = "brand-icon" }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <linearGradient id="ft-brand-left" x1="4" y1="3" x2="16" y2="29" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#2d856b" />
+          <stop offset="100%" stopColor="#144234" />
+        </linearGradient>
+        <linearGradient id="ft-brand-right" x1="16" y1="3" x2="28" y2="29" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#3ea988" />
+          <stop offset="100%" stopColor="#1f5d4a" />
+        </linearGradient>
+      </defs>
+      {/* Left Structural Facet (PO Baseline) */}
+      <path
+        d="M16 2.5L5 7.8C4.4 8.1 4 8.8 4 9.5V17.5C4 23.5 9 28.2 15.5 29.8C15.8 29.9 16.2 29.9 16.5 29.8V2.5H16Z"
+        fill="url(#ft-brand-left)"
+      />
+      {/* Right Dynamic Facet (Invoice Claim) */}
+      <path
+        d="M16 2.5L27 7.8C27.6 8.1 28 8.8 28 9.5V17.5C28 23.5 23 28.2 16.5 29.8V2.5H16Z"
+        fill="url(#ft-brand-right)"
+      />
+      {/* Central Interlocking Diamond Lens (Algorithmic Verification Core) */}
+      <path
+        d="M16 10L20.5 15.5L16 21L11.5 15.5L16 10Z"
+        fill="#F5EFE9"
+      />
+      <circle cx="16" cy="15.5" r="2" fill="#144234" />
+      {/* Top Horizon Bar */}
+      <path
+        d="M10 8.5H22V10.5H10V8.5Z"
+        fill="#F5EFE9"
+        fillOpacity="0.9"
+      />
+    </svg>
+  );
+}
+
 function Brand() {
   return (
     <div className="brand">
       <span className="brand-mark">
-        <Icon name="shield" className="brand-icon" />
+        <BrandMark className="brand-icon" />
       </span>
       <span className="brand-copy">
         <span className="brand-name">FinTrust</span>
