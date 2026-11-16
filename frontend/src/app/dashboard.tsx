@@ -117,6 +117,7 @@ const navigation: { label: Section; icon: IconName }[] = [
   { label: "Vendor Records", icon: "building" },
   { label: "Risk Monitoring", icon: "risk" },
   { label: "Audit Trail", icon: "audit" },
+  { label: "Settings", icon: "settings" },
 ];
 
 const defaultDashboard: DashboardData = {
@@ -1897,17 +1898,6 @@ export default function Dashboard() {
         </nav>
 
         <div className="sidebar-footer">
-          <div className="nav-caption">PREFERENCES</div>
-          <button
-            aria-current={section === "Settings" ? "page" : undefined}
-            className={`nav-item ${section === "Settings" ? "nav-item-active" : ""}`}
-            onClick={() => setSection("Settings")}
-            type="button"
-          >
-            <Icon name="settings" />
-            <span>Settings</span>
-            {section === "Settings" && <span className="nav-active-mark" />}
-          </button>
           <div className="sidebar-note">
             <span className="note-mark">
               <Icon name="shield" />
@@ -1933,6 +1923,16 @@ export default function Dashboard() {
           </div>
           <div className="topbar-tools">
             <ConnectionBadge state={connection} onRefresh={checkConnection} />
+            <button
+              aria-label="Workspace Settings"
+              className={`topbar-settings-button ${section === "Settings" ? "active" : ""}`}
+              onClick={() => setSection("Settings")}
+              type="button"
+              title="Workspace Settings"
+            >
+              <Icon name="settings" />
+              <span>Settings</span>
+            </button>
           </div>
         </header>
 

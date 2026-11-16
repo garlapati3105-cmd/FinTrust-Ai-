@@ -390,6 +390,38 @@ svg {
   background: var(--red);
 }
 
+.topbar-settings-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  padding: 7px 14px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.topbar-settings-button:hover {
+  background: var(--surface-soft);
+  border-color: var(--line-strong);
+  transform: translateY(-1px);
+}
+
+.topbar-settings-button.active {
+  background: var(--green-soft);
+  border-color: rgba(31, 93, 74, 0.3);
+  color: var(--green);
+}
+
+.topbar-settings-button .icon {
+  width: 14px;
+  height: 14px;
+}
+
 .connection-button {
   display: inline-flex;
   align-items: center;
