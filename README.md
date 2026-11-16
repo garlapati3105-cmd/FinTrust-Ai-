@@ -1,29 +1,33 @@
-# FinTrust AI — Financial Evidence-Verification & Fraud-Prevention Workspace
+# FinTrust AI — Financial Evidence-Verification & Discrepancy-Detection Workspace
 
 [![Next.js 16](https://img.shields.io/badge/Frontend-Next.js%2016%20%7C%20React%2019-black?logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.12-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20(Integer%20Paise)-003B57?logo=sqlite)](https://sqlite.org/)
 [![PyMuPDF & RapidOCR](https://img.shields.io/badge/OCR-PyMuPDF%20%2B%20RapidOCR%20ONNX-orange)](#-document-extraction--ocr-pipeline)
 [![Tests Passing](https://img.shields.io/badge/Tests-68%2F68%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
-[![Evaluation Benchmark](https://img.shields.io/badge/Benchmark-100%25%20Decision%20Accuracy%20(31%20Docs)-blue)](#-evaluation-lab--real-world-reliability)
-[![Live AI Validated](https://img.shields.io/badge/Live%20AI-100%25%20Field%20%26%20Evidence%20Match-brightgreen)](#-live-openrouter-ai-model-validation)
+[![Evaluation Benchmark](https://img.shields.io/badge/Benchmark-31--Doc%20Synthetic%20Benchmark%20(100%25%20Accuracy)-blue)](#-evaluation-lab--31-document-synthetic-offline-benchmark)
+[![Live AI Validated](https://img.shields.io/badge/Live%20AI-3--Doc%20Smoke%20Test%20(21%2F21%20Fields)-brightgreen)](#-live-openrouter-ai-model-validation)
 [![Hackathon](https://img.shields.io/badge/Hackathon-Arthaton%202026%20(AI%20for%20Finance)-purple)](#)
 
-> **FinTrust AI** is an evidence-first, database-backed financial operations workspace engineered for Indian MSMEs. It stops overbilling, GST tax errors, duplicate payment fraud, and rogue account redirection before vendor disbursements are executed.
+> **FinTrust AI** is an evidence-first, database-backed financial verification and discrepancy-detection layer engineered for Indian MSMEs. It surfaces overbilling, GST tax calculation variances, duplicate invoice submissions, and unapproved bank account references before payment decisions are made.
 
 ---
 
 ## 📌 Executive Summary & Problem Statement
 
-Indian Micro, Small, and Medium Enterprises (MSMEs) process hundreds of physical and digital invoices every month. Accounts payable teams routinely face four critical risks:
+Indian Micro, Small, and Medium Enterprises (MSMEs) process hundreds of physical and digital invoices each month across multiple operational workflows. Accounts payable and finance teams routinely face four critical operational risks:
 
-1. **Invoice Overbilling & Tax Variance:** Bills that subtly or significantly exceed approved Purchase Orders (POs) or miscalculate Goods & Services Tax (GST).
-2. **Duplicate Invoicing Fraud:** Inadvertently or maliciously re-submitting previously approved invoices weeks apart with modified dates or whitespace variants.
-3. **Vendor Impersonation & Account Redirection:** Discrepancies between invoice remittance accounts and trusted vendor bank references on file.
-4. **Unaccountable AI "Hallucinations":** Conventional generative AI tools produce plausible numbers without deterministic cross-referencing against internal ERP records, risking costly financial errors.
+1. **Invoice Overbilling & Tax Variance:** Bills that subtly or significantly deviate from approved Purchase Orders (POs) or miscalculate Goods & Services Tax (GST) rates.
+2. **Duplicate Invoice Submissions:** Inadvertently or maliciously re-submitting previously approved invoice numbers weeks apart with modified dates, casing, or whitespace.
+3. **Unapproved Bank Account Discrepancies:** Discrepancies between invoice remittance accounts and trusted vendor bank references on file in the internal master database.
+4. **Unaccountable AI "Hallucinations":** Conventional generative AI extractors can hallucinate plausible numbers without verifiable source quotes or deterministic cross-referencing against internal ERP records, risking costly financial errors.
 
-**FinTrust AI solves this with a strict architectural invariant:**  
-The AI model is an **untrusted extraction parser**, and the **SQLite database is the authoritative truth**. The LLM never approves invoices, never mutates the database, and never initiates financial transfers.
+### The Architectural Differentiator
+
+While OCR and document matching tools exist in isolation, FinTrust AI bridges the trust gap through a strict separation of concerns:
+- **The AI model is an untrusted extraction parser**: It extracts draft field suggestions from document text and must supply verbatim supporting quotes with character-level containment and value substantiation.
+- **The SQLite database is the authoritative baseline**: The LLM never decides invoice validity, never approves invoices, never mutates the database, and never initiates financial transactions.
+- **Authoritative verification is 100% deterministic**: The backend computes monetary comparisons in exact integer paise via Python `Decimal`, validates active vendor status, verifies internal bank references, checks unique vendor/invoice constraints, and issues an `APPROVE` or `HOLD` recommendation for human review.
 
 ---
 
@@ -61,7 +65,7 @@ The AI model is an **untrusted extraction parser**, and the **SQLite database is
     └── Atomic normalized duplicate check
                   │
                   ▼
-[ Verification Decision: APPROVE / HOLD ] ──► [ Immutable Append-Only Audit Ledger ]
+[ Verification Decision: APPROVE / HOLD ] ──► [ Application-Level Append-Only Audit Ledger ]
 ```
 
 ---
@@ -70,27 +74,27 @@ The AI model is an **untrusted extraction parser**, and the **SQLite database is
 
 | Invariant | Implementation Mechanism | Purpose |
 |---|---|---|
-| **AI Never Approves** | AI extractor outputs draft JSON fields; verification happens solely via `POST /api/verify-invoice`. | Eliminates unsupervised AI actions and hallucinated approvals. |
+| **No AI-Initiated Approval** | AI extractor outputs draft JSON field suggestions; authoritative verification decisions are computed solely by the backend deterministic verification engine via `POST /api/verify-invoice` upon human submission. | Eliminates unsupervised AI actions and hallucinated approvals. |
 | **Integer-Paise Precision** | All monetary amounts use Python `Decimal` and persist as integer paise (`₹1.00 = 100 paise`). | Prevents floating-point rounding errors and precision leaks. |
-| **Zero Client Authority** | Frontend submits only what the invoice claims; approved baselines are queried directly from the server database. | Prevents client-side tampering of approved budgets or GST rates. |
-| **Bidirectional Grounding** | Verifies quote presence in document text, page containment, and value substantiation in quote. | Prevents models from citing unrelated text to justify hallucinated figures. |
-| **Append-Only Immutability** | Database layer contains zero `UPDATE` or `DELETE` statements for audit records or invoices. | Guarantees an immutable, tamper-evident audit trail for financial comptrollers. |
+| **Zero Client Authority** | The frontend submits only what the invoice claims; approved purchase order values and vendor bank references are queried directly from the server database. | Prevents client-side tampering of approved budgets or GST rates. |
+| **Bidirectional Grounding** | Verifies quote presence in document text, page containment, and value substantiation within the quote. | Prevents models from citing unrelated text to justify hallucinated figures. |
+| **Application-Level Append-Only Audit Trail** | The application backend exposes strictly append-only `INSERT` operations for audit events with no `UPDATE` or `DELETE` API endpoints or repository methods. | Maintains an immutable operational ledger for financial reviews. (See limitations regarding direct database-file access). |
 
 ---
 
 ## 🖥️ Application Screens & Workflows
 
-FinTrust AI is designed with an enterprise financial operations aesthetic: **warm ivory background** (`#f5efe9`), **forest-green brand accent** (`#1f5d4a`), **charcoal typography** (`#1b1f1c`), muted amber warnings, and restrained red alerts.
+FinTrust AI is designed with an enterprise financial operations aesthetic: **warm ivory background** (`#fbfaf8`), **forest-green brand accent** (`#1f5d4a`), **charcoal typography** (`#1d2524`), dark mode support (`#0f1412` page, `#18201d` surfaces), muted amber warnings, and restrained red alerts.
 
 ### 1. Overview Dashboard (`OverviewPage`)
 - **Live Database KPIs:** Real-time counts for Registered Vendors, Approved POs, Invoices Processed, and Pending Reviews queried directly from `GET /api/dashboard`.
 - **4-Step Workflow Stepper:** Clear operational visualization (`1. Upload Document` → `2. Extract & OCR` → `3. Compare Baseline` → `4. Human Review`).
 - **Needs Your Attention Queue:** Action-focused queue of held invoices featuring direct **"Investigate →"** prefill links.
-- **Recent Activity:** Live feeds of recent verification decisions and immutable audit logs.
+- **Recent Activity:** Live feeds of recent verification decisions and append-only audit logs.
 
 ### 2. Invoice Verification Workspace (`InvoiceVerificationWorkspace`)
 - **Document Ingestion:** Drag-and-drop zone supporting PDF, PNG, JPG, and JPEG files.
-- **Collapsible Document Text Preview:** Tipalti-inspired text inspector showing extracted multi-page document text with `--- Page N ---` boundaries.
+- **Collapsible Document Text Preview:** Text inspector showing extracted multi-page document text with `--- Page N ---` boundaries.
 - **Live Side-by-Side Reconciliation Table:** Displays Invoice Claim, PO Baseline, and exact Variance across Total, GST, and Line Items.
 - **Discrepancy Analysis Card:** Plain-English explanation of variances with recommended next financial actions.
 - **Supporting Evidence Card:** Field-by-field evidence quotes, reported page numbers, confidence ratings, and green verified badges.
@@ -106,18 +110,23 @@ FinTrust AI is designed with an enterprise financial operations aesthetic: **war
 - **Interactive Risk Filter Chips:** Filter table instantly by `All`, `High`, `Medium`, and `Low` risk.
 
 ### 5. Audit Trail (`AuditTrailPage`)
-- **Immutable Ledger:** Complete event log capturing every approval, hold, and duplicate attempt.
+- **Application-Level Append-Only Ledger:** Complete event log capturing every approval, hold, and duplicate submission attempt.
 - **IST Timestamps:** Formatted in India Standard Time (`Asia/Kolkata`, `en-IN`, e.g., `15 Nov 2026, 05:15:25 pm IST`).
 - **Event Filter Chips:** Filter by `All Events`, `Approvals`, `Holds`, and `Duplicate Blocks`.
-- **Audit Detail Modal:** Deep-dive modal inspecting raw cryptographic event payloads and decision rationales.
+- **Audit Detail Modal:** Detailed modal inspecting stored audit event attributes (`entity_type`, `entity_id`, `event_type`, `decision`, `reason`, `created_at`) and decision rationales.
 
 ---
 
 ## ⚡ Quickstart Guide
 
 ### Prerequisites
-- **Python 3.11+**
-- **Node.js 18+** and **npm**
+- **Python 3.11+** (Tested in Python 3.12.7)
+- **Node.js 20.9+** (Required by Next.js 16.4.6) and **npm**
+
+### OpenRouter API Configuration
+- **Live External Inference:** An OpenRouter API key is **required** for live external AI extraction. Set `$env:OPENROUTER_API_KEY = "your-key"` in your shell before starting the backend.
+- **Model Selection & Rate Limits:** The default model setting is `openrouter/free`. This routes dynamically across currently available free models on OpenRouter at zero token cost. However, free models remain subject to OpenRouter's rate limits (requests per minute/day), and the returned provider model identifier may differ from request to request.
+- **Operation Without API Key:** When `OPENROUTER_API_KEY` is not set, the platform remains fully functional for manual entry, document upload, selectable PDF text extraction (PyMuPDF), and local OCR fallback (RapidOCR). Only live AI field extraction is disabled, with a clear notification banner displayed in the UI.
 
 ### 1. Backend Setup (FastAPI)
 ```powershell
@@ -131,15 +140,14 @@ python -m venv .venv
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure environment (optional: set your OpenRouter key)
-# Copy .env.example to .env or set environment variables:
-$env:OPENROUTER_API_KEY = "your-openrouter-key"        # Optional: uses free router by default
-$env:FINTRUST_EXTRACTION_MODEL = "openrouter/free"     # Auto-routes across active free models
+# Configure environment for live AI extraction (optional, but required for external inference)
+$env:OPENROUTER_API_KEY = "your-openrouter-api-key"
+$env:FINTRUST_EXTRACTION_MODEL = "openrouter/free"
 
 # Start FastAPI server
 python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
-*Backend runs on: `http://127.0.0.1:8000` (API Docs: `http://127.0.0.1:8000/docs`)*
+*Backend runs on: `http://127.0.0.1:8000` (Interactive API Docs: `http://127.0.0.1:8000/docs`)*
 
 ### 2. Frontend Setup (Next.js)
 ```powershell
@@ -158,7 +166,7 @@ npm run dev
 
 ## 🎯 5-Minute Judge Demonstration Sequence
 
-To demonstrate the full verification and fraud-prevention workflow in 5 minutes, follow this sequence using the pre-generated synthetic invoices in `evaluation/dataset/documents/`:
+To demonstrate the full verification and discrepancy-detection workflow in 5 minutes, follow this sequence using the pre-generated synthetic invoices in `evaluation/dataset/documents/`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
@@ -173,13 +181,13 @@ To demonstrate the full verification and fraud-prevention workflow in 5 minutes,
 │ 2. Discrepancy card flags: 'Invoice exceeds approved PO by ₹10,000.00'.     │
 │ 3. Click 'Submit for Authoritative Verification' ──► Instant HOLD.          │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ SCENARIO C: Duplicate Invoicing Fraud Prevention (HOLD)                     │
+│ SCENARIO C: Duplicate Invoice Submission Detection (HOLD)                   │
 │ 1. Re-submit 'INV-EVAL-001.pdf' (already approved in Scenario A).           │
 │ 2. Click 'Submit for Authoritative Verification'.                           │
-│ 3. Atomic UNIQUE check triggers: 'Duplicate invoice submission'.            │
+│ 3. Atomic UNIQUE constraint triggers: 'Duplicate invoice submission'.       │
 │ 4. Original record is preserved without overwrite; duplicate event logged.  │
 ├─────────────────────────────────────────────────────────────────────────────┤
-│ SCENARIO D: Immutable Audit Trail Inspection                                │
+│ SCENARIO D: Application-Level Audit Trail Inspection                        │
 │ 1. Navigate to 'Audit Trail' tab.                                           │
 │ 2. Show append-only event log with India Standard Time (IST) timestamps.    │
 │ 3. Click an event to open the Audit Event Details Modal.                    │
@@ -199,7 +207,10 @@ $env:FINTRUST_EXTRACTION_MODEL = "openrouter/free"
 python evaluation/scripts/run_live_smoke_test.py
 ```
 
-### Live Test Results (Measured November 16, 2026)
+### Live Smoke Test Results (Measured November 16, 2026)
+
+> [!NOTE]
+> This live smoke test evaluates **three synthetic documents** (21 total field assertions: 7 fields × 3 documents) across dynamically resolved OpenRouter free models. It verifies live API schema compatibility, OCR fallback integration, and prompt-injection handling under real network conditions. It is a live integration smoke test rather than general proof of production extraction accuracy across all real-world invoice layouts.
 
 | Document | Test Category | Format | Resolved Live Model | AI Latency | Field Match | Evidence Verified |
 |---|---|---|---|---|---|---|
@@ -207,20 +218,20 @@ python evaluation/scripts/run_live_smoke_test.py
 | **INV-EVAL-031** | Scanned rasterized invoice | PDF | `nvidia/nemotron-3.5-super-vl:free` | 5.21s | **7/7 (100%)** | **7/7 (100%)** |
 | **INV-EVAL-022** | Adversarial prompt-injection | PDF | `recursive/flint-v1.0:free` | 11.84s | **7/7 (100%)** | **7/7 (100%)** |
 
-- **Overall Field Accuracy:** **100.0%** (21 / 21 fields matched ground truth)
+- **Field Extraction Match:** **100.0%** (21 / 21 fields matched ground truth across the 3 live test documents)
 - **Evidence Grounding Accuracy:** **100.0%** (21 / 21 quotes verified against source text and page bounds)
-- **Missing Field Rate:** **0.0%**
-- **OCR Completion Rate:** **100.0%** (RapidOCR recovered all text layers on rasterized PDF)
+- **Missing Field Rate:** **0.0%** (0 / 21 fields missing)
+- **OCR Completion Rate:** **100.0%** (RapidOCR successfully recovered text layers on the rasterized PDF)
 - **Average Network AI Latency:** **7.05 seconds**
-- **Total Token Usage:** **5,092 tokens** ($0 cost on free tier)
+- **Total Token Usage:** **5,092 tokens** ($0 cost on OpenRouter free tier)
 - **Adversarial Security:** Flagged 2 injection directives in `INV-EVAL-022.pdf` and emitted zero unauthorized decisions.
-- **Detailed Audit Artifacts:** [`evaluation/reports/live_smoke_test.json`](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/live_smoke_test.json) and [`evaluation/reports/live_smoke_test.md`](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/live_smoke_test.md).
+- **Detailed Artifacts:** [`evaluation/reports/live_smoke_test.json`](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/live_smoke_test.json) and [`evaluation/reports/live_smoke_test.md`](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/live_smoke_test.md).
 
 ---
 
-## 🧪 Evaluation Lab & Real-World Reliability
+## 🧪 Evaluation Lab — 31-Document Synthetic Offline Benchmark
 
-The repository includes an automated Evaluation Lab benchmarking the end-to-end workflow across a dataset of **31 synthetic invoice documents** (30 PDFs, 1 high-resolution PNG):
+The repository includes an automated Evaluation Lab benchmarking the end-to-end workflow across a dataset of **31 synthetic invoice documents** (30 PDFs, 1 high-resolution PNG) generated using fictional entities and synthetic `DEMO-ACCT-*` internal references:
 
 ```powershell
 python evaluation/scripts/run_evaluation.py
@@ -235,10 +246,14 @@ python evaluation/scripts/run_evaluation.py
 | **Field Extraction Accuracy** | High precision across 7 fields | **100.0%** (217/217 fields) | **PASSED** |
 | **Adversarial Grounding** | Reject ungrounded / mismatched quotes | **100.0%** (5/5 adversarial cases) | **PASSED** |
 | **Malicious Injection Detection** | Flag directive injection phrases | **100.0%** (4/4 attacks flagged) | **PASSED** |
-| **Heuristic False Positive Rate** | Document regex boundary trade-off | **100.0%** on benign shipping note | **OBSERVED** |
+| **Heuristic False Positive Rate** | Regex scanner boundary limitation | **100.0%** (1/1 benign lookalike sample flagged)* | **OBSERVED** |
 | **Verification Decision Accuracy** | Exact deterministic policy execution | **100.0%** (31/31 correct decisions) | **PASSED** |
 | **Clean Invoice Approvals** | 0% false holds on valid invoices | **100.0%** (8/8 clean approved) | **PASSED** |
-| **Duplicate Prevention** | Catch resubmissions & retain original | **100.0%** (3/3 duplicates caught) | **PASSED** |
+| **Duplicate Submission Prevention** | Catch resubmissions & retain original | **100.0%** (3/3 duplicates caught) | **PASSED** |
+
+*\*Note on Benign False-Positive Observation:* The heuristic regex scanner flagged 1 benign shipping instruction sample containing the phrase *"ignore previous delivery gate instructions"*. This observation reflects an intentional security trade-off based on a single adversarial test case rather than a broad statistical population estimate. It demonstrates why regex scanning is treated as an advisory defense-in-depth warning that prompts human review rather than an automated decision blocker.
+
+- **Detailed Benchmark Report:** [`evaluation/reports/evaluation_report.md`](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/evaluation_report.md).
 
 ---
 
@@ -247,11 +262,12 @@ python evaluation/scripts/run_evaluation.py
 The project includes **68 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, and adversarial grounding:
 
 ```powershell
-pytest backend/tests
-============================= 68 passed in 22.50s =============================
+pytest backend/tests -q
+....................................................................     [100%]
+68 passed in 85.43s
 ```
 
-- **`test_database.py` (13 tests):** Schema creation, integer-paise conversions, foreign key constraints, unique constraints, and append-only audit logs.
+- **`test_database.py` (13 tests):** Schema initialization, integer-paise conversions, foreign key constraints, unique vendor/normalized invoice constraints, and append-only audit event logging.
 - **`test_verification.py` (21 tests):** Clean matches, amount variances, GST mismatches, line-item mismatches, inactive/unknown vendors, duplicate submissions, and missing required fields.
 - **`test_document_extraction.py` (19 tests):** Magic byte validation, upload limits, PyMuPDF extraction, RapidOCR fallback, prompt-injection scanner, evidence quote verification, and API key absence fallback.
 - **`test_evaluation_framework.py` (15 tests):** Ground truth integrity, adversarial grounding, OCR edge cases, deterministic verification consistency, and decision immutability.
@@ -269,7 +285,7 @@ cd frontend; npx next build --webpack
 
 ## 🗄️ Database Schema & Synthetic Seed Data
 
-The database initializes four relational tables in `backend/fintrust.db` with foreign keys enabled:
+The database initializes four relational tables in `backend/fintrust.db` with SQLite foreign keys enabled (`PRAGMA foreign_keys = ON`):
 
 ```sql
 -- Vendors Master
@@ -312,7 +328,7 @@ CREATE TABLE invoices (
     UNIQUE (vendor_id, normalized_invoice_number)
 );
 
--- Immutable Append-Only Audit Ledger
+-- Application-Level Append-Only Audit Ledger
 CREATE TABLE audit_events (
     id INTEGER PRIMARY KEY,
     entity_type TEXT NOT NULL,
@@ -338,12 +354,13 @@ CREATE TABLE audit_events (
 
 | Method | Endpoint | Description | Input | Output |
 |---|---|---|---|---|
-| `GET` | `/health` | Service health probe | None | JSON application & connectivity status |
+| `GET` | `/` | API welcome message | None | `{"message": "Welcome to the FinTrust AI API"}` |
+| `GET` | `/health` / `/api/health` | Health and connectivity probe | None | JSON application & connectivity status |
 | `GET` | `/api/dashboard` | Aggregated dashboard KPI metrics | None | JSON with vendor, PO, invoice, and pending counts |
 | `GET` | `/api/vendors` | List registered vendor records | None | Array of `VendorRead` records |
 | `GET` | `/api/purchase-orders` | List approved purchase orders | None | Array of `PurchaseOrderRead` records |
 | `GET` | `/api/invoices` | List historical verified invoices | None | Array of `InvoiceRead` records |
-| `GET` | `/api/audit-events` | List immutable audit events | None | Array of `AuditEventRead` records |
+| `GET` | `/api/audit-events` | List application audit events | None | Array of `AuditEventRead` records |
 | `POST` | `/api/verify-invoice` | Deterministic verification engine | `InvoiceVerificationRequest` | `InvoiceVerificationResponse` (APPROVE / HOLD) |
 | `POST` | `/api/documents/extract` | Document upload, OCR, and AI extraction | `UploadFile` (multipart) | `DocumentExtractionResponse` with quotes & confidence |
 
@@ -351,11 +368,14 @@ CREATE TABLE audit_events (
 
 ## ⚠️ Limitations, Scope & Honest Presentation Disclaimers
 
-1. **Synthetic Demonstration Data:** All vendor records, purchase orders, account references, and test documents are fictional demonstration fixtures. No real personal data or genuine corporate documents are used.
-2. **Account Reference Verification:** The system verifies consistency against stored vendor master records (`DEMO-ACCT-*`). It does **not** interface with live banking APIs (e.g. NPCI / RBI account aggregator) to verify external bank account ownership.
-3. **No Financial Disbursements:** The system verifies invoices and logs discrepancies; it does not initiate or execute wire transfers or bank payments.
-4. **Heuristic Scanner Trade-off:** The regex prompt scanner is a defense-in-depth heuristic. Benign logistics notes containing phrases like *"ignore previous instructions"* will trigger a warning, requiring human review to confirm benign intent.
-5. **No Automated Approvals:** The platform strictly enforces a human-in-the-loop requirement. Document upload only extracts and drafts values into an interactive workspace; verification requires deliberate user submission.
+1. **Synthetic Demonstration Data:** All vendor entities, purchase orders, account references, and test documents are fictional fixtures generated for demonstration and evaluation. No genuine personal data, live corporate documents, or real banking records are used.
+2. **Internal Account Consistency vs. Live Bank Ownership:** The system verifies consistency between the invoice's remittance reference and the vendor's pre-approved account reference on file in the internal database (`DEMO-ACCT-*`). It does **not** interface with live banking APIs (e.g., NPCI, RBI Account Aggregator, or bank verification networks) to verify external bank account ownership or beneficiary identities.
+3. **Duplicate Submission Detection vs. Duplicate Payment Detection:** Duplicate detection is scoped to identifying repeat invoice submissions in the database based on `(vendor_id, normalized_invoice_number)`. FinTrust AI does not monitor external bank accounts, payment gateways, or ERP accounting disbursements, and therefore does not verify whether an actual duplicate financial payment was executed externally.
+4. **No Payment Disbursement:** FinTrust AI operates strictly as a financial verification and discrepancy-detection layer. It does not initiate, schedule, or execute wire transfers, UPI transfers, or banking disbursements.
+5. **Verification Decision Scope (APPROVE vs HOLD):** The backend emits `APPROVE` or `HOLD` recommendations based strictly on deterministic comparisons against stored purchase orders and vendor profiles. An `APPROVE` decision indicates that invoice claims match internal database baselines; it does not constitute payment authorization or fund release.
+6. **No AI-Initiated Approval:** The architecture strictly enforces a human-controlled verification boundary. Document upload extracts draft fields into an interactive workspace; verification requires deliberate user review and submission. The AI extraction model has zero authority to issue decisions or update the database.
+7. **Audit Trail Implementation:** The audit trail operates with application-level append-only guarantees: the application code exposes only `INSERT` queries, with no `UPDATE` or `DELETE` API endpoints or repository methods. It does not implement cryptographic hash chaining, digital signatures, or hardware tamper-proofing. Users with direct local filesystem access to the underlying `fintrust.db` file could modify or delete records.
+8. **Heuristic Prompt Scanner Trade-off:** The regex-based prompt scanner is a defense-in-depth heuristic designed to flag common instruction-injection patterns. Benign text with overlapping terminology (such as delivery instructions containing *"ignore previous delivery gate instructions"*) will trigger advisory warnings, requiring human review to confirm benign intent.
 
 ---
 
