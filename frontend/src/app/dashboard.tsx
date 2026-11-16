@@ -508,9 +508,6 @@ function OverviewPage({
             <span className="eyebrow dark">
               <span />Verification overview
             </span>
-            <div className="demo-environment-badge">
-              <span>●</span> Demonstration Workspace • Synthetic Test Environment
-            </div>
           </div>
           <h2>Evidence and review pipeline</h2>
         </div>
@@ -738,7 +735,10 @@ function VendorDetailsModal({
 }) {
   const associatedPos = pos.filter((p) => p.vendor_id === vendor.id);
   const associatedInvoices = invoices.filter((i) => i.vendor_id === vendor.id);
-  const maskedAccount = `DEMO-ACCT-****${vendor.bank_account_ref.slice(-4)}`;
+  const maskedAccount =
+    vendor.bank_account_ref.length > 4
+      ? `•••• •••• ${vendor.bank_account_ref.slice(-4)}`
+      : vendor.bank_account_ref;
 
   return (
     <div className="modal-overlay" onClick={onClose} role="dialog" aria-modal="true">
@@ -771,8 +771,8 @@ function VendorDetailsModal({
               <strong>{maskedAccount}</strong>
             </div>
             <div className="modal-key-val">
-              <span>Reference Type</span>
-              <strong style={{ fontSize: "11px", color: "var(--muted)" }}>Synthetic internal identifier</strong>
+              <span>Account Verification</span>
+              <strong style={{ fontSize: "11px", color: "var(--green)" }}>Registered Master Record</strong>
             </div>
           </div>
         </div>
@@ -1146,7 +1146,7 @@ function VendorRecordsPage({
                     </td>
                     <td>
                       <span className="status-badge" style={{ background: "var(--surface-soft)" }}>
-                        {`DEMO-ACCT-****${v.bank_account_ref.slice(-4)}`}
+                        {v.bank_account_ref.length > 4 ? `•••• •••• ${v.bank_account_ref.slice(-4)}` : v.bank_account_ref}
                       </span>
                     </td>
                     <td>
@@ -1903,7 +1903,7 @@ export default function Dashboard() {
               <span>Decisions stay yours.</span>
             </div>
           </div>
-          <div className="sidebar-legal">FINTRUST AI <span>·</span> EARLY ACCESS</div>
+          <div className="sidebar-legal">FINTRUST AI <span>·</span> ENTERPRISE AUDIT</div>
         </div>
       </aside>
 
@@ -2087,13 +2087,13 @@ function InvoiceVerificationWorkspace({
   const [showRawText, setShowRawText] = useState(false);
 
   // Form input state (used for both manual entry and reviewing AI extractions)
-  const [invoiceNumber, setInvoiceNumber] = useState("INV-TEST-1001");
-  const [vendorName, setVendorName] = useState("Aster Office Supplies");
-  const [poNumber, setPoNumber] = useState("PO-1001");
-  const [invoiceTotal, setInvoiceTotal] = useState("85000.00");
-  const [gstAmount, setGstAmount] = useState("12966.10");
-  const [lineItems, setLineItems] = useState("5");
-  const [bankAccountRef, setBankAccountRef] = useState("DEMO-ACCT-1001");
+  const [invoiceNumber, setInvoiceNumber] = useState(prefillData?.invoiceNumber ?? "");
+  const [vendorName, setVendorName] = useState(prefillData?.vendorName ?? "");
+  const [poNumber, setPoNumber] = useState(prefillData?.poNumber ?? "");
+  const [invoiceTotal, setInvoiceTotal] = useState(prefillData?.invoiceTotal ?? "");
+  const [gstAmount, setGstAmount] = useState(prefillData?.gstAmount ?? "");
+  const [lineItems, setLineItems] = useState(prefillData?.lineItems ?? "");
+  const [bankAccountRef, setBankAccountRef] = useState(prefillData?.bankAccountRef ?? "");
 
   useEffect(() => {
     async function loadBaselines() {
@@ -2713,13 +2713,13 @@ function InvoiceVerificationWorkspace({
             </div>
           )}
 
-          {/* Quick Demonstration Presets */}
+          {/* Sample Invoices */}
           <div style={{ marginBottom: "14px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
               <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Evaluation Presets
+                Sample Invoices
               </span>
-              <span style={{ fontSize: "10px", color: "var(--muted)" }}>Click to test</span>
+              <span style={{ fontSize: "10px", color: "var(--muted)" }}>Click to load sample</span>
             </div>
             <div className="sample-presets">
               {presets.map((preset) => (
@@ -2905,7 +2905,7 @@ function InvoiceVerificationWorkspace({
                   type="text"
                   value={bankAccountRef}
                   onChange={(e) => setBankAccountRef(e.target.value)}
-                  placeholder="e.g. DEMO-ACCT-1001"
+                  placeholder="e.g. ACCT-1001"
                 />
                 {extractionData?.fields?.invoice_bank_account_ref && (
                   <div className="field-meta-row">
@@ -2983,12 +2983,9 @@ function InvoiceVerificationWorkspace({
               <strong style={{ display: "block", fontSize: "15px", marginBottom: "8px" }}>
                 Awaiting Purchase Order Baseline
               </strong>
-              <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "360px", margin: "0 auto 14px", lineHeight: 1.6 }}>
-                Enter or select a PO number (e.g. <strong>PO-1001</strong>) in the intake form. FinTrust AI compares invoice values against authorized records stored in the SQLite database.
+              <p style={{ fontSize: "13px", color: "var(--muted)", maxWidth: "360px", margin: "0 auto", lineHeight: 1.6 }}>
+                Enter or select a PO number (e.g. <strong>PO-1001</strong>) in the intake form. FinTrust AI compares invoice values against authorized records stored in the database.
               </p>
-              <span style={{ fontSize: "11px", color: "var(--soft)", fontStyle: "italic" }}>
-                No fake approved values are shown without a valid PO baseline.
-              </span>
             </div>
           ) : !matchedPO && !verification ? (
             /* Condition 2: PO entered but not found in DB */
@@ -3029,15 +3026,13 @@ function InvoiceVerificationWorkspace({
                   </li>
                   <li>
                     <span>Trusted Account Ref</span>
-                    <strong>{trustedBankRef ?? "—"}</strong>
+                    <strong>{trustedBankRef ? (trustedBankRef.length > 4 ? `•••• •••• ${trustedBankRef.slice(-4)}` : trustedBankRef) : "—"}</strong>
                   </li>
                   <li>
-                    <span>Account Check</span>
-                    <strong style={{ fontSize: "11px" }}>Internal synthetic reference comparison</strong>
-                  </li>
-                  <li>
-                    <span>Ownership verification</span>
-                    <strong style={{ fontSize: "11px", color: "var(--muted)" }}>Not performed (reference matching only)</strong>
+                    <span>Account Verification</span>
+                    <strong style={{ fontSize: "11px", color: bankMatched ? "var(--green)" : bankMatched === false ? "var(--red)" : "var(--muted)" }}>
+                      {bankMatched === true ? "✓ Reference Matched" : bankMatched === false ? "⚠ Reference Mismatch" : "Awaiting Verification"}
+                    </strong>
                   </li>
                 </ul>
               </div>
@@ -3341,19 +3336,6 @@ function InvoiceVerificationWorkspace({
                   </div>
                 </div>
               )}
-
-              <div
-                style={{
-                  marginTop: "14px",
-                  fontSize: "11px",
-                  color: "var(--soft)",
-                  lineHeight: 1.5,
-                  borderLeft: "2px solid var(--line-strong)",
-                  paddingLeft: "8px",
-                }}
-              >
-                Note: Bank account reference matching is an internal synthetic reference check only. It does not constitute external bank ownership or beneficiary verification.
-              </div>
             </>
           )}
         </section>
