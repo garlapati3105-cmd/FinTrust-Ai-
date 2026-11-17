@@ -8,6 +8,13 @@ from typing import Any
 
 from .database import get_connection
 from .financial import from_paise, normalize_invoice_number, to_paise
+from .gst_integrity import (
+    GSTIntegrityReport,
+    STATUS_MANUAL_REVIEW_REQUIRED,
+    STATUS_MISMATCH,
+    STATUS_MISSING,
+    evaluate_gst_integrity,
+)
 from .schemas import InvoiceVerificationRequest
 
 HIGH_RISK_AMOUNT_VARIANCE_PAISE = to_paise(Decimal("50000"))
@@ -83,7 +90,7 @@ def _hold_response(
 def _evaluate(
     payload: InvoiceVerificationRequest,
     po: sqlite3.Row,
-) -> tuple[list[dict[str, str]], str, dict[str, int]]:
+) -> tuple[list[dict[str, str]], str, dict[str, int], dict[str, Any] | None]:
     findings: list[dict[str, str]] = []
     high_risk = False
 
@@ -94,7 +101,7 @@ def _evaluate(
             "detail": "The purchase order has no associated vendor record; manual review is required.",
             "level": "high",
         })
-        return findings, "high", {"amount": 0, "gst": 0, "line_items": 0}
+        return findings, "high", {"amount": 0, "gst": 0, "line_items": 0}, None
 
     if not po["is_active"]:
         high_risk = True
@@ -184,13 +191,68 @@ def _evaluate(
             "level": "high",
         })
 
+    # GST Integrity Evaluation
+    po_keys = set(po.keys())
+    inv_components = {
+        "cgst": to_paise(payload.cgst_amount) if payload.cgst_amount is not None else 0,
+        "sgst": to_paise(payload.sgst_amount) if payload.sgst_amount is not None else 0,
+        "utgst": to_paise(payload.utgst_amount) if payload.utgst_amount is not None else 0,
+        "igst": to_paise(payload.igst_amount) if payload.igst_amount is not None else 0,
+        "cess": to_paise(payload.cess_amount) if payload.cess_amount is not None else 0,
+    }
+    po_components = {
+        "cgst": int(po["approved_cgst_paise"] or 0) if "approved_cgst_paise" in po_keys else 0,
+        "sgst": int(po["approved_sgst_paise"] or 0) if "approved_sgst_paise" in po_keys else 0,
+        "utgst": int(po["approved_utgst_paise"] or 0) if "approved_utgst_paise" in po_keys else 0,
+        "igst": int(po["approved_igst_paise"] or 0) if "approved_igst_paise" in po_keys else 0,
+        "cess": int(po["approved_cess_paise"] or 0) if "approved_cess_paise" in po_keys else 0,
+    }
+    trusted_supp_gstin = po["vendor_gstin"] if "vendor_gstin" in po_keys else None
+    trusted_recip_gstin = po["recipient_gstin"] if "recipient_gstin" in po_keys else None
+    po_pos = po["place_of_supply_state_code"] if "place_of_supply_state_code" in po_keys else None
+    gst_profile = po["gst_transaction_profile"] if "gst_transaction_profile" in po_keys and po["gst_transaction_profile"] else "STANDARD_DOMESTIC"
+
+    gst_report = evaluate_gst_integrity(
+        invoice_supplier_gstin=payload.supplier_gstin,
+        trusted_supplier_gstin=trusted_supp_gstin,
+        invoice_recipient_gstin=payload.recipient_gstin,
+        trusted_recipient_gstin=trusted_recip_gstin,
+        invoice_pos_code=payload.place_of_supply_state_code,
+        po_pos_code=po_pos,
+        gst_profile=gst_profile,
+        invoice_components=inv_components,
+        po_components=po_components,
+        declared_total_gst_paise=gst_amount_paise,
+    )
+
+    # Determine if GST fields should actively influence findings
+    has_gst_inputs = bool(
+        payload.supplier_gstin
+        or payload.recipient_gstin
+        or payload.place_of_supply_state_code
+        or any(v > 0 for v in inv_components.values())
+        or gst_profile == "SPECIAL_CASE_REVIEW"
+    )
+
+    if has_gst_inputs:
+        for f in gst_report.findings:
+            if f.status in (STATUS_MISMATCH, STATUS_MISSING, STATUS_MANUAL_REVIEW_REQUIRED):
+                findings.append({
+                    "code": f.finding_code,
+                    "title": f.finding_code.replace("_", " ").title(),
+                    "detail": f.explanation,
+                    "level": f.severity if f.severity in ("high", "medium", "low") else "medium",
+                })
+                if f.severity == "high":
+                    high_risk = True
+
     risk_level = "high" if high_risk else ("medium" if findings else "low")
     variance = {
         "amount": amount_variance,
         "gst": gst_variance,
         "line_items": item_variance,
     }
-    return findings, risk_level, variance
+    return findings, risk_level, variance, gst_report.to_dict()
 
 
 def _format_response(
@@ -205,6 +267,7 @@ def _format_response(
     duplicate_of_invoice_id: int | None = None,
     duplicate: bool = False,
     variance: dict[str, int] | None = None,
+    gst_checks: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     return {
         "decision": decision,
@@ -237,6 +300,10 @@ def _format_response(
             if variance is not None
             else {"amount": None, "gst": None, "line_items": None}
         ),
+        "supplier_gstin": payload.supplier_gstin,
+        "recipient_gstin": payload.recipient_gstin,
+        "place_of_supply_state_code": payload.place_of_supply_state_code,
+        "gst_checks": gst_checks,
     }
 
 
@@ -256,10 +323,20 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                     po.approved_gst_paise,
                     po.approved_line_items,
                     po.status,
+                    po.recipient_gstin,
+                    po.place_of_supply_state_code,
+                    po.gst_transaction_profile,
+                    po.approved_cgst_paise,
+                    po.approved_sgst_paise,
+                    po.approved_utgst_paise,
+                    po.approved_igst_paise,
+                    po.approved_cess_paise,
                     v.vendor_code,
                     v.name AS vendor_name,
                     v.bank_account_ref,
-                    v.is_active
+                    v.is_active,
+                    v.gstin AS vendor_gstin,
+                    v.gstin_verification_status
                 FROM purchase_orders AS po
                 LEFT JOIN vendors AS v ON v.id = po.vendor_id
                 WHERE po.po_number = ?
@@ -345,8 +422,10 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                     duplicate=True,
                 )
 
-            findings, risk_level, variance = _evaluate(payload, po)
+            findings, risk_level, variance, gst_checks = _evaluate(payload, po)
             decision = "HOLD" if findings else "APPROVE"
+            gst_status = gst_checks.get("overall_status") if gst_checks else None
+
             cursor = connection.execute(
                 """
                 INSERT INTO invoices (
@@ -360,9 +439,18 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                     invoice_bank_account_ref,
                     decision,
                     risk_level,
+                    supplier_gstin,
+                    recipient_gstin,
+                    place_of_supply_state_code,
+                    cgst_paise,
+                    sgst_paise,
+                    utgst_paise,
+                    igst_paise,
+                    cess_paise,
+                    gst_validation_status,
                     created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload.invoice_number,
@@ -375,6 +463,15 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                     payload.invoice_bank_account_ref,
                     decision,
                     risk_level,
+                    payload.supplier_gstin,
+                    payload.recipient_gstin,
+                    payload.place_of_supply_state_code,
+                    to_paise(payload.cgst_amount) if payload.cgst_amount is not None else 0,
+                    to_paise(payload.sgst_amount) if payload.sgst_amount is not None else 0,
+                    to_paise(payload.utgst_amount) if payload.utgst_amount is not None else 0,
+                    to_paise(payload.igst_amount) if payload.igst_amount is not None else 0,
+                    to_paise(payload.cess_amount) if payload.cess_amount is not None else 0,
+                    gst_status,
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 ),
             )
@@ -400,6 +497,7 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                 invoice_id=invoice_id,
                 audit_event_id=audit_event_id,
                 variance=variance,
+                gst_checks=gst_checks,
             )
     except sqlite3.IntegrityError:
         with get_connection() as connection:
@@ -437,8 +535,13 @@ def verify_and_record_invoice(payload: InvoiceVerificationRequest) -> dict[str, 
                 SELECT
                     po.id AS po_id, po.po_number, po.vendor_id,
                     po.approved_total_paise, po.approved_gst_paise,
-                    po.approved_line_items, po.status, v.vendor_code,
-                    v.name AS vendor_name, v.bank_account_ref, v.is_active
+                    po.approved_line_items, po.status,
+                    po.recipient_gstin, po.place_of_supply_state_code,
+                    po.gst_transaction_profile, po.approved_cgst_paise,
+                    po.approved_sgst_paise, po.approved_utgst_paise,
+                    po.approved_igst_paise, po.approved_cess_paise,
+                    v.vendor_code, v.name AS vendor_name, v.bank_account_ref,
+                    v.is_active, v.gstin AS vendor_gstin, v.gstin_verification_status
                 FROM purchase_orders AS po
                 JOIN vendors AS v ON v.id = po.vendor_id
                 WHERE po.po_number = ?

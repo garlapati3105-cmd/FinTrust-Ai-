@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -22,6 +23,26 @@ class InvoiceVerificationRequest(BaseModel):
             "bank-account ownership."
         ),
     )
+    supplier_gstin: str | None = Field(
+        default=None,
+        max_length=15,
+        description="Declared supplier GSTIN on invoice.",
+    )
+    recipient_gstin: str | None = Field(
+        default=None,
+        max_length=15,
+        description="Declared buyer/recipient GSTIN on invoice.",
+    )
+    place_of_supply_state_code: str | None = Field(
+        default=None,
+        max_length=10,
+        description="Place of supply state code (e.g. '27').",
+    )
+    cgst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
+    sgst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
+    utgst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
+    igst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
+    cess_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
 
     @field_validator("invoice_number", "vendor_name", "po_number")
     @classmethod
@@ -31,16 +52,19 @@ class InvoiceVerificationRequest(BaseModel):
             raise ValueError("This value must not be blank.")
         return normalized
 
-    @field_validator("invoice_bank_account_ref")
+    @field_validator("invoice_bank_account_ref", "supplier_gstin", "recipient_gstin", "place_of_supply_state_code")
     @classmethod
-    def trim_account_reference(cls, value: str | None) -> str | None:
+    def trim_optional_text(cls, value: str | None) -> str | None:
         if value is None:
             return None
-        return value.strip() or None
+        trimmed = value.strip()
+        return trimmed or None
 
-    @field_validator("invoice_total", "gst_amount")
+    @field_validator("invoice_total", "gst_amount", "cgst_amount", "sgst_amount", "utgst_amount", "igst_amount", "cess_amount")
     @classmethod
-    def require_paise_precision(cls, value: Decimal) -> Decimal:
+    def require_paise_precision(cls, value: Decimal | None) -> Decimal | None:
+        if value is None:
+            return None
         if not value.is_finite():
             raise ValueError("Money amounts must be finite.")
         if value.as_tuple().exponent < -2:
@@ -84,6 +108,11 @@ class InvoiceVerificationResponse(BaseModel):
     approved_gst: float | None = None
     approved_line_items: int | None = None
     variance: dict[str, float | int | None] = Field(default_factory=dict)
+    # GST Integrity fields
+    supplier_gstin: str | None = None
+    recipient_gstin: str | None = None
+    place_of_supply_state_code: str | None = None
+    gst_checks: dict[str, Any] | None = None
 
 
 class VendorRead(BaseModel):
@@ -92,6 +121,8 @@ class VendorRead(BaseModel):
     name: str
     bank_account_ref: str
     is_active: bool
+    gstin: str | None = None
+    gstin_verification_status: str = "NOT_VERIFIED"
     created_at: str
 
 
@@ -106,6 +137,14 @@ class PurchaseOrderRead(BaseModel):
     approved_line_items: int
     status: str
     issue_date: str
+    recipient_gstin: str | None = None
+    place_of_supply_state_code: str | None = None
+    gst_transaction_profile: str = "STANDARD_DOMESTIC"
+    approved_cgst_paise: int = 0
+    approved_sgst_paise: int = 0
+    approved_utgst_paise: int = 0
+    approved_igst_paise: int = 0
+    approved_cess_paise: int = 0
     created_at: str
 
 
@@ -121,6 +160,15 @@ class InvoiceRead(BaseModel):
     invoice_bank_account_ref: str | None
     decision: str | None
     risk_level: str | None
+    supplier_gstin: str | None = None
+    recipient_gstin: str | None = None
+    place_of_supply_state_code: str | None = None
+    cgst_paise: int = 0
+    sgst_paise: int = 0
+    utgst_paise: int = 0
+    igst_paise: int = 0
+    cess_paise: int = 0
+    gst_validation_status: str | None = None
     created_at: str
 
 

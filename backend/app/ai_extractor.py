@@ -32,7 +32,15 @@ You must output a single valid JSON object containing exactly these keys:
   "invoice_total": {"value": decimal string (e.g. "85000.00") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
   "gst_amount": {"value": decimal string (e.g. "12966.10") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
   "line_items": {"value": int or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
-  "invoice_bank_account_ref": {"value": string or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0}
+  "invoice_bank_account_ref": {"value": string or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "supplier_gstin": {"value": string (15-char GSTIN) or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "recipient_gstin": {"value": string (15-char GSTIN) or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "place_of_supply_state_code": {"value": string (2-digit state code, e.g. "27") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "cgst_amount": {"value": decimal string (e.g. "6483.05") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "sgst_amount": {"value": decimal string (e.g. "6483.05") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "utgst_amount": {"value": decimal string (e.g. "3546.61") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "igst_amount": {"value": decimal string (e.g. "18305.08") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0},
+  "cess_amount": {"value": decimal string (e.g. "0.00") or null, "page_number": int or null, "evidence_quote": string or null, "confidence": float between 0.0 and 1.0}
 }
 Output only the JSON object, with no markdown code fences or conversational prose.
 """
@@ -45,6 +53,14 @@ FIELD_KEYS = [
     "gst_amount",
     "line_items",
     "invoice_bank_account_ref",
+    "supplier_gstin",
+    "recipient_gstin",
+    "place_of_supply_state_code",
+    "cgst_amount",
+    "sgst_amount",
+    "utgst_amount",
+    "igst_amount",
+    "cess_amount",
 ]
 
 
@@ -81,7 +97,7 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
     if not norm_quote:
         return False
 
-    if key in ("invoice_total", "gst_amount"):
+    if key in ("invoice_total", "gst_amount", "cgst_amount", "sgst_amount", "utgst_amount", "igst_amount", "cess_amount"):
         try:
             d = Decimal(str(value))
             rupees = int(d)
@@ -102,6 +118,16 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
             return False
         except (InvalidOperation, ValueError):
             return _normalize_search_text(str(value)) in norm_quote
+
+    elif key in ("supplier_gstin", "recipient_gstin"):
+        norm_val = re.sub(r"[^a-zA-Z0-9]", "", str(value)).lower()
+        norm_q_clean = re.sub(r"[^a-zA-Z0-9]", "", str(evidence_quote)).lower()
+        return norm_val in norm_q_clean
+
+    elif key == "place_of_supply_state_code":
+        val_str = str(value).strip().lower()
+        tokens = re.findall(r"\b\w+\b", norm_quote)
+        return val_str in tokens or val_str in norm_quote
 
     elif key == "line_items":
         val_str = str(value).strip()
@@ -238,8 +264,21 @@ def parse_and_validate_ai_response(
 
         if key in ("invoice_total",):
             val = _format_monetary_string(raw_val)
-        elif key in ("gst_amount",):
+        elif key in ("gst_amount", "cgst_amount", "sgst_amount", "utgst_amount", "igst_amount", "cess_amount"):
             val = _format_gst_string(raw_val)
+        elif key in ("supplier_gstin", "recipient_gstin"):
+            if raw_val is not None:
+                val = re.sub(r"[^a-zA-Z0-9]", "", str(raw_val)).strip().upper()
+                if not val:
+                    val = None
+        elif key == "place_of_supply_state_code":
+            if raw_val is not None:
+                clean_pos = str(raw_val).strip()
+                match = re.search(r"\b\d{2}\b", clean_pos)
+                if match:
+                    val = match.group(0)
+                else:
+                    val = clean_pos[:10] or None
         elif key == "line_items":
             try:
                 val = int(raw_val) if raw_val is not None else None

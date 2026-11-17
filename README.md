@@ -4,7 +4,8 @@
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI%20%7C%20Python%203.12-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20(Integer%20Paise)-003B57?logo=sqlite)](https://sqlite.org/)
 [![PyMuPDF & RapidOCR](https://img.shields.io/badge/OCR-PyMuPDF%20%2B%20RapidOCR%20ONNX-orange)](#-document-extraction--ocr-pipeline)
-[![Tests Passing](https://img.shields.io/badge/Tests-68%2F68%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
+[![GST Engine](https://img.shields.io/badge/GST%20Engine-India%20GST%20(Luhn%20Mod%2036)-1f5d4a)](#-india-gst-integrity-engine)
+[![Tests Passing](https://img.shields.io/badge/Tests-105%2F105%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
 [![Evaluation Benchmark](https://img.shields.io/badge/Benchmark-31--Doc%20Synthetic%20Benchmark%20(100%25%20Accuracy)-blue)](#-evaluation-lab--31-document-synthetic-offline-benchmark)
 [![Live AI Validated](https://img.shields.io/badge/Live%20AI-3--Doc%20Smoke%20Test%20(21%2F21%20Fields)-brightgreen)](#-live-openrouter-ai-model-validation)
 [![Hackathon](https://img.shields.io/badge/Hackathon-Arthaton%202026%20(AI%20for%20Finance)-purple)](#)
@@ -77,6 +78,7 @@ While OCR and document matching tools exist in isolation, FinTrust AI bridges th
 | **No AI-Initiated Approval** | AI extractor outputs draft JSON field suggestions; authoritative verification decisions are computed solely by the backend deterministic verification engine via `POST /api/verify-invoice` upon human submission. | Eliminates unsupervised AI actions and hallucinated approvals. |
 | **Integer-Paise Precision** | All monetary amounts use Python `Decimal` and persist as integer paise (`₹1.00 = 100 paise`). | Prevents floating-point rounding errors and precision leaks. |
 | **Zero Client Authority** | The frontend submits only what the invoice claims; approved purchase order values and vendor bank references are queried directly from the server database. | Prevents client-side tampering of approved budgets or GST rates. |
+| **India GST Integrity Engine** | Validates 15-character GSTINs via Luhn mod 36, identifies State/UT codes, enforces Sections 7 & 8 of the IGST Act (CGST+SGST/UTGST vs IGST), and reconciles component breakdowns within ₹1.00 tolerance. | Prevents tax-type misclassification and invalid GST filings. |
 | **Bidirectional Grounding** | Verifies quote presence in document text, page containment, and value substantiation within the quote. | Prevents models from citing unrelated text to justify hallucinated figures. |
 | **Application-Level Append-Only Audit Trail** | The application backend exposes strictly append-only `INSERT` operations for audit events with no `UPDATE` or `DELETE` API endpoints or repository methods. | Maintains an immutable operational ledger for financial reviews. (See limitations regarding direct database-file access). |
 
@@ -96,9 +98,10 @@ FinTrust AI is designed with an enterprise financial operations aesthetic: **war
 - **Document Ingestion:** Drag-and-drop zone supporting PDF, PNG, JPG, and JPEG files.
 - **Collapsible Document Text Preview:** Text inspector showing extracted multi-page document text with `--- Page N ---` boundaries.
 - **Live Side-by-Side Reconciliation Table:** Displays Invoice Claim, PO Baseline, and exact Variance across Total, GST, and Line Items.
+- **India GST Integrity Engine Panel:** Real-time statutory GST analysis displaying Supplier GSTIN (with Luhn checksum validation), Recipient GSTIN matching, Place of Supply State identification, Intra-State vs Inter-State classification (CGST+SGST/UTGST vs IGST), and component breakdown reconciliation.
 - **Discrepancy Analysis Card:** Plain-English explanation of variances with recommended next financial actions.
 - **Supporting Evidence Card:** Field-by-field evidence quotes, reported page numbers, confidence ratings, and green verified badges.
-- **Sample Presets:** One-click loaders (`Matching PO-1001`, `Amount Mismatch +₹50`, `GST Mismatch +₹6k`, `Bank Ref Mismatch`).
+- **Sample Presets:** One-click loaders (`Intra-State Clean PO-1001`, `Inter-State Clean PO-1002`, `Intra-UT Clean PO-1003`, `Tax Type Mismatch`, `Amount Mismatch +₹50`, `Invalid GSTIN Checksum`).
 
 ### 3. Vendor Records (`VendorRecordsPage`)
 - **Vendor Master Directory:** Displays registered vendors, active status badges, and masked internal bank account references (`DEMO-ACCT-****1001`).
@@ -259,14 +262,16 @@ python evaluation/scripts/run_evaluation.py
 
 ## 🔬 Automated Testing & Regression Suite
 
-The project includes **68 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, and adversarial grounding:
+The project includes **105 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
 
 ```powershell
 pytest backend/tests -q
-....................................................................     [100%]
-68 passed in 85.43s
+........................................................................ [ 68%]
+.................................                                        [100%]
+105 passed in 32.58s
 ```
 
+- **`test_gst_integrity.py` (37 tests):** India GST Integrity Engine validation: 15-character GSTIN structure, official 38 State/UT catalogue, SGST vs UTGST distinction (Delhi/Puducherry/J&K vs Chandigarh/Ladakh/Dadra), Luhn mod 36 positive/negative checksum calculation, intra-state vs inter-state tax classification, component reconciliation (CGST, SGST, UTGST, IGST, Cess), ₹1.00 rounding tolerance, and full end-to-end API verification.
 - **`test_database.py` (13 tests):** Schema initialization, integer-paise conversions, foreign key constraints, unique vendor/normalized invoice constraints, and append-only audit event logging.
 - **`test_verification.py` (21 tests):** Clean matches, amount variances, GST mismatches, line-item mismatches, inactive/unknown vendors, duplicate submissions, and missing required fields.
 - **`test_document_extraction.py` (19 tests):** Magic byte validation, upload limits, PyMuPDF extraction, RapidOCR fallback, prompt-injection scanner, evidence quote verification, and API key absence fallback.
@@ -274,10 +279,11 @@ pytest backend/tests -q
 
 ### Frontend Production Build
 ```powershell
-cd frontend; npx next build --webpack
-▲ Next.js 16.4.6 (webpack)
-✓ Compiled successfully in 5.8s
-✓ Generating static pages (3/3)
+cd frontend; npm run build
+▲ Next.js 16.4.6 (Turbopack)
+✓ Compiled successfully in 5.0s
+✓ Running TypeScript ... Finished in 14.0s
+✓ Generating static pages (4/4) in 6.1s
 ```
 *Result: **0 TypeScript errors, 0 compilation warnings**.*
 
@@ -285,20 +291,22 @@ cd frontend; npx next build --webpack
 
 ## 🗄️ Database Schema & Synthetic Seed Data
 
-The database initializes four relational tables in `backend/fintrust.db` with SQLite foreign keys enabled (`PRAGMA foreign_keys = ON`):
+The database initializes four relational tables in `backend/fintrust.db` with SQLite foreign keys enabled (`PRAGMA foreign_keys = ON`), featuring idempotent schema migrations for the GST Integrity Engine:
 
 ```sql
--- Vendors Master
+-- Vendors Master (with GSTIN support)
 CREATE TABLE vendors (
     id INTEGER PRIMARY KEY,
     vendor_code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
     bank_account_ref TEXT NOT NULL,
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
+    gstin TEXT,
+    gstin_verification_status TEXT DEFAULT 'NOT_VERIFIED',
     created_at TEXT NOT NULL
 );
 
--- Approved Purchase Orders
+-- Approved Purchase Orders (with GST baseline & components)
 CREATE TABLE purchase_orders (
     id INTEGER PRIMARY KEY,
     po_number TEXT UNIQUE NOT NULL,
@@ -308,10 +316,18 @@ CREATE TABLE purchase_orders (
     approved_line_items INTEGER NOT NULL CHECK (approved_line_items >= 0),
     status TEXT NOT NULL,
     issue_date TEXT NOT NULL,
+    recipient_gstin TEXT,
+    place_of_supply_state_code TEXT,
+    gst_transaction_profile TEXT DEFAULT 'STANDARD_DOMESTIC',
+    approved_cgst_paise INTEGER DEFAULT 0,
+    approved_sgst_paise INTEGER DEFAULT 0,
+    approved_utgst_paise INTEGER DEFAULT 0,
+    approved_igst_paise INTEGER DEFAULT 0,
+    approved_cess_paise INTEGER DEFAULT 0,
     created_at TEXT NOT NULL
 );
 
--- Verified Invoices
+-- Verified Invoices (with GST component breakdown)
 CREATE TABLE invoices (
     id INTEGER PRIMARY KEY,
     invoice_number TEXT NOT NULL,
@@ -324,6 +340,15 @@ CREATE TABLE invoices (
     invoice_bank_account_ref TEXT,
     decision TEXT,
     risk_level TEXT,
+    supplier_gstin TEXT,
+    recipient_gstin TEXT,
+    place_of_supply_state_code TEXT,
+    cgst_paise INTEGER DEFAULT 0,
+    sgst_paise INTEGER DEFAULT 0,
+    utgst_paise INTEGER DEFAULT 0,
+    igst_paise INTEGER DEFAULT 0,
+    cess_paise INTEGER DEFAULT 0,
+    gst_validation_status TEXT,
     created_at TEXT NOT NULL,
     UNIQUE (vendor_id, normalized_invoice_number)
 );
@@ -376,11 +401,13 @@ CREATE TABLE audit_events (
 6. **No AI-Initiated Approval:** The architecture strictly enforces a human-controlled verification boundary. Document upload extracts draft fields into an interactive workspace; verification requires deliberate user review and submission. The AI extraction model has zero authority to issue decisions or update the database.
 7. **Audit Trail Implementation:** The audit trail operates with application-level append-only guarantees: the application code exposes only `INSERT` queries, with no `UPDATE` or `DELETE` API endpoints or repository methods. It does not implement cryptographic hash chaining, digital signatures, or hardware tamper-proofing. Users with direct local filesystem access to the underlying `fintrust.db` file could modify or delete records.
 8. **Heuristic Prompt Scanner Trade-off:** The regex-based prompt scanner is a defense-in-depth heuristic designed to flag common instruction-injection patterns. Benign text with overlapping terminology (such as delivery instructions containing *"ignore previous delivery gate instructions"*) will trigger advisory warnings, requiring human review to confirm benign intent.
+9. **GST Verification Scope (Offline Validation Only):** Syntactic structure and Luhn mod 36 checksum validation confirms format adherence only. FinTrust AI does not scrape, bypass CAPTCHA, or integrate directly with the government GST Portal (gst.gov.in). Validation does not prove that a GSTIN is currently active, suspended, or cancelled by tax authorities. Automated tax classification applies standard domestic supply rules under Sections 7, 8, 10, and 12 of the IGST Act, 2017; complex transactions (SEZ supplies, export/import transactions, and reverse charge mechanisms) require manual tax specialist review.
 
 ---
 
 ## 📚 In-Depth Project Documentation
 
+- **[India GST Integrity Engine Specification](file:///c:/Users/hp/Downloads/FinTrustAI/docs/GST_INTEGRITY_ENGINE.md):** `docs/GST_INTEGRITY_ENGINE.md`
 - **[5-Minute Judge Presentation Script](file:///c:/Users/hp/Downloads/FinTrustAI/docs/FINTRUST_AI_FIVE_MINUTE_DEMO.md):** `docs/FINTRUST_AI_FIVE_MINUTE_DEMO.md`
 - **[Comprehensive Project Status & Architecture Report](file:///c:/Users/hp/Downloads/FinTrustAI/docs/FINTRUST_AI_COMPLETE_PROJECT_STATUS_REPORT.md):** `docs/FINTRUST_AI_COMPLETE_PROJECT_STATUS_REPORT.md`
 - **[Live Model Validation Report (JSON)](file:///c:/Users/hp/Downloads/FinTrustAI/evaluation/reports/live_smoke_test.json):** `evaluation/reports/live_smoke_test.json`

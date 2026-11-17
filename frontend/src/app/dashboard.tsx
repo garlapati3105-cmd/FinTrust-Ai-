@@ -52,6 +52,44 @@ type DashboardData = {
   audit_entries: AuditItem[];
 };
 
+type GSTCheckFinding = {
+  finding_code: string;
+  severity: "INFO" | "WARNING" | "CRITICAL";
+  status: "PASS" | "MISMATCH" | "MISSING" | "NOT_EVALUATED" | "MANUAL_REVIEW_REQUIRED";
+  field_name: string;
+  invoice_value: string | null;
+  trusted_value: string | null;
+  explanation: string;
+  recommended_action: string;
+};
+
+type GSTChecks = {
+  gst_validation_status: string;
+  tax_classification: {
+    status: string;
+    expected: string;
+    observed: string;
+    supplier_state: string | null;
+    supplier_state_name: string | null;
+    place_of_supply: string | null;
+    pos_state_name: string | null;
+    is_union_territory: boolean;
+    explanation: string;
+  };
+  components: {
+    cgst_paise: number;
+    sgst_paise: number;
+    utgst_paise: number;
+    igst_paise: number;
+    cess_paise: number;
+    declared_gst_paise: number;
+    sum_components_paise: number;
+    difference_paise: number;
+    within_tolerance: boolean;
+  };
+  findings: GSTCheckFinding[];
+};
+
 type VerificationResult = {
   invoice_number: string;
   vendor_name: string;
@@ -77,6 +115,10 @@ type VerificationResult = {
     line_items: number | null;
   };
   findings: Array<{ title: string; detail: string; level: string }>;
+  supplier_gstin?: string | null;
+  recipient_gstin?: string | null;
+  place_of_supply_state_code?: string | null;
+  gst_checks?: GSTChecks | null;
 };
 
 type ExtractedField = {
@@ -662,6 +704,8 @@ type VendorRead = {
   name: string;
   bank_account_ref: string;
   is_active: boolean;
+  gstin?: string | null;
+  gstin_verification_status?: string;
   created_at: string;
 };
 
@@ -676,6 +720,14 @@ type PurchaseOrderRead = {
   approved_line_items: number;
   status: string;
   issue_date: string;
+  recipient_gstin?: string | null;
+  place_of_supply_state_code?: string | null;
+  gst_transaction_profile?: string;
+  approved_cgst_paise?: number;
+  approved_sgst_paise?: number;
+  approved_utgst_paise?: number;
+  approved_igst_paise?: number;
+  approved_cess_paise?: number;
   created_at: string;
 };
 
@@ -701,6 +753,15 @@ type InvoiceRead = {
   invoice_bank_account_ref: string | null;
   decision: string | null;
   risk_level: string | null;
+  supplier_gstin?: string | null;
+  recipient_gstin?: string | null;
+  place_of_supply_state_code?: string | null;
+  cgst_paise?: number;
+  sgst_paise?: number;
+  utgst_paise?: number;
+  igst_paise?: number;
+  cess_paise?: number;
+  gst_validation_status?: string | null;
   created_at: string;
 };
 
@@ -2080,6 +2141,14 @@ function InvoiceVerificationWorkspace({
     gstAmount?: string;
     lineItems?: string;
     bankAccountRef?: string;
+    supplierGstin?: string;
+    recipientGstin?: string;
+    placeOfSupply?: string;
+    cgstAmount?: string;
+    sgstAmount?: string;
+    utgstAmount?: string;
+    igstAmount?: string;
+    cessAmount?: string;
   } | null;
 }) {
   const [verification, setVerification] = useState<VerificationResult | null>(null);
@@ -2110,6 +2179,15 @@ function InvoiceVerificationWorkspace({
   const [gstAmount, setGstAmount] = useState(prefillData?.gstAmount ?? "");
   const [lineItems, setLineItems] = useState(prefillData?.lineItems ?? "");
   const [bankAccountRef, setBankAccountRef] = useState(prefillData?.bankAccountRef ?? "");
+  // GST Integrity specific input state
+  const [supplierGstin, setSupplierGstin] = useState(prefillData?.supplierGstin ?? "");
+  const [recipientGstin, setRecipientGstin] = useState(prefillData?.recipientGstin ?? "");
+  const [placeOfSupply, setPlaceOfSupply] = useState(prefillData?.placeOfSupply ?? "");
+  const [cgstAmount, setCgstAmount] = useState(prefillData?.cgstAmount ?? "");
+  const [sgstAmount, setSgstAmount] = useState(prefillData?.sgstAmount ?? "");
+  const [utgstAmount, setUtgstAmount] = useState(prefillData?.utgstAmount ?? "");
+  const [igstAmount, setIgstAmount] = useState(prefillData?.igstAmount ?? "");
+  const [cessAmount, setCessAmount] = useState(prefillData?.cessAmount ?? "");
 
   useEffect(() => {
     async function loadBaselines() {
@@ -2139,6 +2217,14 @@ function InvoiceVerificationWorkspace({
       if (prefillData.gstAmount) setGstAmount(prefillData.gstAmount);
       if (prefillData.lineItems) setLineItems(prefillData.lineItems);
       if (prefillData.bankAccountRef) setBankAccountRef(prefillData.bankAccountRef);
+      if (prefillData.supplierGstin) setSupplierGstin(prefillData.supplierGstin);
+      if (prefillData.recipientGstin) setRecipientGstin(prefillData.recipientGstin);
+      if (prefillData.placeOfSupply) setPlaceOfSupply(prefillData.placeOfSupply);
+      if (prefillData.cgstAmount) setCgstAmount(prefillData.cgstAmount);
+      if (prefillData.sgstAmount) setSgstAmount(prefillData.sgstAmount);
+      if (prefillData.utgstAmount) setUtgstAmount(prefillData.utgstAmount);
+      if (prefillData.igstAmount) setIgstAmount(prefillData.igstAmount);
+      if (prefillData.cessAmount) setCessAmount(prefillData.cessAmount);
       setVerification(null);
       setError("");
     }
@@ -2146,8 +2232,8 @@ function InvoiceVerificationWorkspace({
 
   const presets = [
     {
-      label: "Matching (PO-1001)",
-      badge: "Clean Match",
+      label: "Intra-State Clean (PO-1001)",
+      badge: "CGST+SGST Match",
       data: {
         invoiceNumber: "INV-TEST-1001",
         vendorName: "Aster Office Supplies",
@@ -2156,6 +2242,77 @@ function InvoiceVerificationWorkspace({
         gstAmount: "12966.10",
         lineItems: "5",
         bankAccountRef: "DEMO-ACCT-1001",
+        supplierGstin: "27AAPCA1234A1Z5",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "6483.05",
+        sgstAmount: "6483.05",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
+      },
+    },
+    {
+      label: "Inter-State Clean (PO-1002)",
+      badge: "IGST Match",
+      data: {
+        invoiceNumber: "INV-TEST-1003",
+        vendorName: "BluePeak Technologies",
+        poNumber: "PO-1002",
+        invoiceTotal: "119967.08",
+        gstAmount: "18305.08",
+        lineItems: "8",
+        bankAccountRef: "DEMO-ACCT-1002",
+        supplierGstin: "29ABCDE1234F1ZW",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "",
+        sgstAmount: "",
+        utgstAmount: "",
+        igstAmount: "18305.08",
+        cessAmount: "0.00",
+      },
+    },
+    {
+      label: "Intra-UT Clean (PO-1003)",
+      badge: "CGST+UTGST Match",
+      data: {
+        invoiceNumber: "INV-TEST-1005",
+        vendorName: "GreenField Logistics",
+        poNumber: "PO-1003",
+        invoiceTotal: "46500.00",
+        gstAmount: "7093.22",
+        lineItems: "4",
+        bankAccountRef: "DEMO-ACCT-1003",
+        supplierGstin: "04AAACG1234D1ZG",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "04",
+        cgstAmount: "3546.61",
+        sgstAmount: "",
+        utgstAmount: "3546.61",
+        igstAmount: "",
+        cessAmount: "0.00",
+      },
+    },
+    {
+      label: "Tax Type Mismatch (Inter-State)",
+      badge: "GST Warning",
+      data: {
+        invoiceNumber: "INV-TEST-1006",
+        vendorName: "BluePeak Technologies",
+        poNumber: "PO-1002",
+        invoiceTotal: "119967.08",
+        gstAmount: "18305.08",
+        lineItems: "8",
+        bankAccountRef: "DEMO-ACCT-1002",
+        supplierGstin: "29ABCDE1234F1ZW",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "9152.54",
+        sgstAmount: "9152.54",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
       },
     },
     {
@@ -2169,19 +2326,35 @@ function InvoiceVerificationWorkspace({
         gstAmount: "12966.10",
         lineItems: "5",
         bankAccountRef: "DEMO-ACCT-1001",
+        supplierGstin: "27AAPCA1234A1Z5",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "6483.05",
+        sgstAmount: "6483.05",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
       },
     },
     {
-      label: "GST Mismatch (+₹6k)",
-      badge: "GST Warning",
+      label: "Invalid GSTIN Checksum",
+      badge: "Format Warning",
       data: {
-        invoiceNumber: "INV-TEST-1003",
-        vendorName: "BluePeak Technologies",
-        poNumber: "PO-1002",
-        invoiceTotal: "120000.00",
-        gstAmount: "19000.00",
-        lineItems: "8",
-        bankAccountRef: "DEMO-ACCT-1002",
+        invoiceNumber: "INV-TEST-1007",
+        vendorName: "Aster Office Supplies",
+        poNumber: "PO-1001",
+        invoiceTotal: "85000.00",
+        gstAmount: "12966.10",
+        lineItems: "5",
+        bankAccountRef: "DEMO-ACCT-1001",
+        supplierGstin: "27AAPCA1234A1Z9",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "6483.05",
+        sgstAmount: "6483.05",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
       },
     },
     {
@@ -2195,6 +2368,14 @@ function InvoiceVerificationWorkspace({
         gstAmount: "12966.10",
         lineItems: "5",
         bankAccountRef: "DEMO-ACCT-9999",
+        supplierGstin: "27AAPCA1234A1Z5",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "6483.05",
+        sgstAmount: "6483.05",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
       },
     },
     {
@@ -2208,6 +2389,14 @@ function InvoiceVerificationWorkspace({
         gstAmount: "12966.10",
         lineItems: "5",
         bankAccountRef: "DEMO-ACCT-1001",
+        supplierGstin: "27AAPCA1234A1Z5",
+        recipientGstin: "27AABCF1234F1Z4",
+        placeOfSupply: "27",
+        cgstAmount: "6483.05",
+        sgstAmount: "6483.05",
+        utgstAmount: "",
+        igstAmount: "",
+        cessAmount: "0.00",
       },
     },
   ];
@@ -2220,6 +2409,14 @@ function InvoiceVerificationWorkspace({
     setGstAmount(presetData.gstAmount);
     setLineItems(presetData.lineItems);
     setBankAccountRef(presetData.bankAccountRef);
+    setSupplierGstin(presetData.supplierGstin || "");
+    setRecipientGstin(presetData.recipientGstin || "");
+    setPlaceOfSupply(presetData.placeOfSupply || "");
+    setCgstAmount(presetData.cgstAmount || "");
+    setSgstAmount(presetData.sgstAmount || "");
+    setUtgstAmount(presetData.utgstAmount || "");
+    setIgstAmount(presetData.igstAmount || "");
+    setCessAmount(presetData.cessAmount || "");
     setError("");
     setVerification(null);
   };
@@ -2300,6 +2497,30 @@ function InvoiceVerificationWorkspace({
         if (result.fields.invoice_bank_account_ref?.value != null) {
           setBankAccountRef(String(result.fields.invoice_bank_account_ref.value));
         }
+        if (result.fields.supplier_gstin?.value != null) {
+          setSupplierGstin(String(result.fields.supplier_gstin.value));
+        }
+        if (result.fields.recipient_gstin?.value != null) {
+          setRecipientGstin(String(result.fields.recipient_gstin.value));
+        }
+        if (result.fields.place_of_supply_state_code?.value != null) {
+          setPlaceOfSupply(String(result.fields.place_of_supply_state_code.value));
+        }
+        if (result.fields.cgst_amount?.value != null) {
+          setCgstAmount(String(result.fields.cgst_amount.value));
+        }
+        if (result.fields.sgst_amount?.value != null) {
+          setSgstAmount(String(result.fields.sgst_amount.value));
+        }
+        if (result.fields.utgst_amount?.value != null) {
+          setUtgstAmount(String(result.fields.utgst_amount.value));
+        }
+        if (result.fields.igst_amount?.value != null) {
+          setIgstAmount(String(result.fields.igst_amount.value));
+        }
+        if (result.fields.cess_amount?.value != null) {
+          setCessAmount(String(result.fields.cess_amount.value));
+        }
       }
     } catch (err) {
       setExtractionError(
@@ -2361,18 +2582,50 @@ function InvoiceVerificationWorkspace({
       }
 
       try {
+        const payloadToSend: Record<string, unknown> = {
+          invoice_number: invoiceNumber.trim(),
+          vendor_name: vendorName.trim(),
+          po_number: poNumber.trim(),
+          invoice_total: totalNum,
+          gst_amount: gstNum,
+          line_items: itemsNum,
+          invoice_bank_account_ref: bankAccountRef.trim() || null,
+        };
+
+        if (supplierGstin.trim()) {
+          payloadToSend.supplier_gstin = supplierGstin.trim().toUpperCase();
+        }
+        if (recipientGstin.trim()) {
+          payloadToSend.recipient_gstin = recipientGstin.trim().toUpperCase();
+        }
+        if (placeOfSupply.trim()) {
+          payloadToSend.place_of_supply_state_code = placeOfSupply.trim();
+        }
+        if (cgstAmount.trim()) {
+          const v = parseFloat(cgstAmount);
+          if (!isNaN(v)) payloadToSend.cgst_amount = v;
+        }
+        if (sgstAmount.trim()) {
+          const v = parseFloat(sgstAmount);
+          if (!isNaN(v)) payloadToSend.sgst_amount = v;
+        }
+        if (utgstAmount.trim()) {
+          const v = parseFloat(utgstAmount);
+          if (!isNaN(v)) payloadToSend.utgst_amount = v;
+        }
+        if (igstAmount.trim()) {
+          const v = parseFloat(igstAmount);
+          if (!isNaN(v)) payloadToSend.igst_amount = v;
+        }
+        if (cessAmount.trim()) {
+          const v = parseFloat(cessAmount);
+          if (!isNaN(v)) payloadToSend.cess_amount = v;
+        }
+
         const response = await fetch("http://localhost:8000/api/verify-invoice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            invoice_number: invoiceNumber.trim(),
-            vendor_name: vendorName.trim(),
-            po_number: poNumber.trim(),
-            invoice_total: totalNum,
-            gst_amount: gstNum,
-            line_items: itemsNum,
-            invoice_bank_account_ref: bankAccountRef.trim() || null,
-          }),
+          body: JSON.stringify(payloadToSend),
         });
 
         if (!response.ok) {
@@ -2406,7 +2659,24 @@ function InvoiceVerificationWorkspace({
         setLoading(false);
       }
     },
-    [invoiceNumber, vendorName, poNumber, invoiceTotal, gstAmount, lineItems, bankAccountRef, loading],
+    [
+      invoiceNumber,
+      vendorName,
+      poNumber,
+      invoiceTotal,
+      gstAmount,
+      lineItems,
+      bankAccountRef,
+      supplierGstin,
+      recipientGstin,
+      placeOfSupply,
+      cgstAmount,
+      sgstAmount,
+      utgstAmount,
+      igstAmount,
+      cessAmount,
+      loading,
+    ],
   );
 
   const findings = verification?.findings ?? [];
@@ -2936,6 +3206,146 @@ function InvoiceVerificationWorkspace({
               </div>
             </div>
 
+            {/* GST Details Sub-Section */}
+            <div style={{ margin: "14px 0 8px", borderTop: "1px dashed var(--line)", paddingTop: "12px" }}>
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "8px" }}>
+                GST Identification & Place of Supply
+              </span>
+
+              <div className="form-field" style={{ marginBottom: "10px" }}>
+                <label htmlFor="input-supplier-gstin">Supplier GSTIN (15 chars)</label>
+                <input
+                  id="input-supplier-gstin"
+                  type="text"
+                  maxLength={15}
+                  value={supplierGstin}
+                  onChange={(e) => setSupplierGstin(e.target.value.toUpperCase())}
+                  placeholder="e.g. 27AAPCA1234A1Z5"
+                />
+                {extractionData?.fields?.supplier_gstin && (
+                  <div className="field-meta-row">
+                    <span className={`evidence-badge ${extractionData.fields.supplier_gstin.evidence_verified ? "verified" : "unverified"}`}>
+                      {extractionData.fields.supplier_gstin.evidence_verified ? "✓ Verified" : "⚠ Unverified"}
+                    </span>
+                    <span className="confidence-pill">
+                      AI: {(extractionData.fields.supplier_gstin.confidence * 100).toFixed(0)}%
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="form-row-2" style={{ marginBottom: "10px" }}>
+                <div className="form-field">
+                  <label htmlFor="input-recipient-gstin">Recipient GSTIN</label>
+                  <input
+                    id="input-recipient-gstin"
+                    type="text"
+                    maxLength={15}
+                    value={recipientGstin}
+                    onChange={(e) => setRecipientGstin(e.target.value.toUpperCase())}
+                    placeholder="e.g. 27AABCF1234F1Z4"
+                  />
+                  {extractionData?.fields?.recipient_gstin && (
+                    <div className="field-meta-row">
+                      <span className={`evidence-badge ${extractionData.fields.recipient_gstin.evidence_verified ? "verified" : "unverified"}`}>
+                        {extractionData.fields.recipient_gstin.evidence_verified ? "✓ Verified" : "⚠ Unverified"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-field">
+                  <label htmlFor="input-pos-state">Place of Supply (POS)</label>
+                  <input
+                    id="input-pos-state"
+                    type="text"
+                    maxLength={2}
+                    value={placeOfSupply}
+                    onChange={(e) => setPlaceOfSupply(e.target.value)}
+                    placeholder="e.g. 27"
+                  />
+                  {extractionData?.fields?.place_of_supply_state_code && (
+                    <div className="field-meta-row">
+                      <span className={`evidence-badge ${extractionData.fields.place_of_supply_state_code.evidence_verified ? "verified" : "unverified"}`}>
+                        {extractionData.fields.place_of_supply_state_code.evidence_verified ? "✓ Verified" : "⚠ Unverified"}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: "8px" }}>
+                Tax Components Breakdown (₹)
+              </span>
+
+              <div className="form-row-2" style={{ marginBottom: "8px" }}>
+                <div className="form-field">
+                  <label htmlFor="input-cgst">CGST (₹)</label>
+                  <input
+                    id="input-cgst"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={cgstAmount}
+                    onChange={(e) => setCgstAmount(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="input-sgst">SGST (₹)</label>
+                  <input
+                    id="input-sgst"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={sgstAmount}
+                    onChange={(e) => setSgstAmount(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="form-row-2" style={{ marginBottom: "8px" }}>
+                <div className="form-field">
+                  <label htmlFor="input-utgst">UTGST (₹)</label>
+                  <input
+                    id="input-utgst"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={utgstAmount}
+                    onChange={(e) => setUtgstAmount(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+                <div className="form-field">
+                  <label htmlFor="input-igst">IGST (₹)</label>
+                  <input
+                    id="input-igst"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={igstAmount}
+                    onChange={(e) => setIgstAmount(e.target.value)}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+
+              <div className="form-field" style={{ marginBottom: "8px" }}>
+                <label htmlFor="input-cess">Cess (₹)</label>
+                <input
+                  id="input-cess"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={cessAmount}
+                  onChange={(e) => setCessAmount(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+
             <button
               className="action-button"
               type="submit"
@@ -3310,6 +3720,320 @@ function InvoiceVerificationWorkspace({
                   </div>
                 </div>
               )}
+
+              {/* =========================================================================
+                  GST INTEGRITY ENGINE ANALYSIS CARD
+                  ========================================================================= */}
+              <div
+                style={{
+                  border: "1px solid var(--line)",
+                  borderRadius: "14px",
+                  background: "var(--surface)",
+                  padding: "16px",
+                  marginTop: "16px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid var(--line)", paddingBottom: "10px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Icon name="shield" />
+                      <strong style={{ fontSize: "14px", color: "var(--text)" }}>
+                        India GST Integrity Engine
+                      </strong>
+                    </div>
+                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>
+                      Statutory Validation • State/UT Identification • Deterministic Component Reconciliation
+                    </span>
+                  </div>
+                  <div>
+                    {verification?.gst_checks ? (
+                      <span
+                        className={`soft-tag ${
+                          verification.gst_checks.gst_validation_status === "VALID"
+                            ? "approve"
+                            : verification.gst_checks.gst_validation_status === "INVALID"
+                            ? "block"
+                            : "warning"
+                        }`}
+                        style={{ fontWeight: 700, fontSize: "11px" }}
+                      >
+                        STATUS: {verification.gst_checks.gst_validation_status}
+                      </span>
+                    ) : (
+                      <span className="soft-tag neutral" style={{ fontSize: "11px" }}>
+                        {supplierGstin ? "Awaiting Verification" : "GSTIN Not Declared"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sub-grid: Supplier GSTIN, Recipient GSTIN, POS & Classification */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "10px", marginBottom: "14px" }}>
+                  {/* Supplier GSTIN Box */}
+                  <div style={{ background: "var(--surface-soft)", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
+                        Supplier GSTIN
+                      </span>
+                      {verification?.gst_checks?.findings.find((f) => f.field_name === "supplier_gstin") ? (
+                        <span className="status-badge" style={{ background: "var(--red-soft)", color: "var(--red)", fontSize: "10px" }}>
+                          MISMATCH / INVALID
+                        </span>
+                      ) : supplierGstin ? (
+                        <span className="status-badge" style={{ background: "rgba(31, 93, 74, 0.15)", color: "var(--green)", fontSize: "10px" }}>
+                          FORMAT VALID
+                        </span>
+                      ) : (
+                        <span className="status-badge" style={{ fontSize: "10px" }}>MISSING</span>
+                      )}
+                    </div>
+                    <strong style={{ fontSize: "13px", fontFamily: "var(--font-mono, monospace)", letterSpacing: "0.05em" }}>
+                      {supplierGstin || verification?.supplier_gstin || "—"}
+                    </strong>
+                    <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
+                      {matchedVendor?.gstin ? (
+                        matchedVendor.gstin === (supplierGstin || verification?.supplier_gstin) ? (
+                          <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Matches Master: {matchedVendor.gstin}</span>
+                        ) : (
+                          <span style={{ color: "var(--red)", fontWeight: 600 }}>⚠ Master Differs: {matchedVendor.gstin}</span>
+                        )
+                      ) : (
+                        <span>Vendor master GSTIN: Not configured</span>
+                      )}
+                    </div>
+                    <div style={{ marginTop: "3px", fontSize: "10px", color: "var(--muted)", fontStyle: "italic" }}>
+                      Registration: <strong style={{ color: "var(--muted)", fontWeight: 600 }}>REGISTRATION NOT VERIFIED</strong> (offline check)
+                    </div>
+                  </div>
+
+                  {/* Recipient GSTIN Box */}
+                  <div style={{ background: "var(--surface-soft)", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
+                        Recipient GSTIN (Buyer)
+                      </span>
+                      {verification?.gst_checks?.findings.find((f) => f.field_name === "recipient_gstin") ? (
+                        <span className="status-badge" style={{ background: "var(--amber-soft)", color: "var(--amber)", fontSize: "10px" }}>
+                          BUYER MISMATCH
+                        </span>
+                      ) : recipientGstin ? (
+                        <span className="status-badge" style={{ background: "rgba(31, 93, 74, 0.15)", color: "var(--green)", fontSize: "10px" }}>
+                          INTERNAL MATCH
+                        </span>
+                      ) : (
+                        <span className="status-badge" style={{ fontSize: "10px" }}>MISSING</span>
+                      )}
+                    </div>
+                    <strong style={{ fontSize: "13px", fontFamily: "var(--font-mono, monospace)", letterSpacing: "0.05em" }}>
+                      {recipientGstin || verification?.recipient_gstin || "—"}
+                    </strong>
+                    <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
+                      {matchedPO?.recipient_gstin ? (
+                        matchedPO.recipient_gstin === (recipientGstin || verification?.recipient_gstin) ? (
+                          <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Matches PO Record: {matchedPO.recipient_gstin}</span>
+                        ) : (
+                          <span style={{ color: "var(--red)", fontWeight: 600 }}>⚠ PO Record Differs: {matchedPO.recipient_gstin}</span>
+                        )
+                      ) : (
+                        <span>PO recipient GSTIN: Not configured</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* POS & Classification Box */}
+                  <div style={{ background: "var(--surface-soft)", padding: "10px 12px", borderRadius: "10px", border: "1px solid var(--line)" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
+                        Tax Classification
+                      </span>
+                      {verification?.gst_checks?.tax_classification ? (
+                        <span
+                          className="status-badge"
+                          style={{
+                            background:
+                              verification.gst_checks.tax_classification.status === "MATCH"
+                                ? "rgba(31, 93, 74, 0.15)"
+                                : "var(--amber-soft)",
+                            color:
+                              verification.gst_checks.tax_classification.status === "MATCH"
+                                ? "var(--green)"
+                                : "var(--amber)",
+                            fontSize: "10px",
+                          }}
+                        >
+                          {verification.gst_checks.tax_classification.status === "MATCH" ? "TAX TYPE MATCH" : "TAX TYPE MISMATCH"}
+                        </span>
+                      ) : (
+                        <span className="status-badge" style={{ fontSize: "10px" }}>PENDING</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: "12px", fontWeight: 700 }}>
+                      POS: {placeOfSupply || verification?.place_of_supply_state_code || "—"}{" "}
+                      {verification?.gst_checks?.tax_classification?.pos_state_name && `(${verification.gst_checks.tax_classification.pos_state_name})`}
+                    </div>
+                    <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--text)" }}>
+                      {verification?.gst_checks?.tax_classification ? (
+                        <>
+                          <span>Expected: <strong>{verification.gst_checks.tax_classification.expected}</strong></span>
+                          {verification.gst_checks.tax_classification.expected !== verification.gst_checks.tax_classification.observed && (
+                            <div style={{ color: "var(--red)", marginTop: "2px" }}>
+                              Observed: <strong>{verification.gst_checks.tax_classification.observed}</strong>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span>Rule: Sec 7/8 IGST Act (Inter vs Intra-State)</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* GST Components Breakdown Table */}
+                <div style={{ border: "1px solid var(--line)", borderRadius: "10px", overflow: "hidden", marginBottom: "12px" }}>
+                  <div className="table-row table-head" style={{ background: "var(--surface-soft)", fontSize: "11px", fontWeight: 700 }}>
+                    <span>GST Component</span>
+                    <span>Invoice Declared</span>
+                    <span>PO Approved</span>
+                    <span>Status / Variance</span>
+                  </div>
+
+                  {/* CGST */}
+                  <div className="table-row" style={{ fontSize: "12px", padding: "8px 12px" }}>
+                    <span>CGST (Central Tax)</span>
+                    <span>{cgstAmount ? `₹${parseFloat(cgstAmount).toFixed(2)}` : "₹0.00"}</span>
+                    <span>{matchedPO ? formatRupees(matchedPO.approved_cgst_paise || 0) : "—"}</span>
+                    <span style={{ fontSize: "11px" }}>
+                      {matchedPO
+                        ? Math.abs(Math.round((parseFloat(cgstAmount) || 0) * 100) - (matchedPO.approved_cgst_paise || 0)) <= 100
+                          ? <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Within baseline</span>
+                          : <span style={{ color: "var(--amber)", fontWeight: 600 }}>⚠ Differs from PO</span>
+                        : "—"}
+                    </span>
+                  </div>
+
+                  {/* SGST */}
+                  <div className="table-row" style={{ fontSize: "12px", padding: "8px 12px" }}>
+                    <span>SGST (State Tax)</span>
+                    <span>{sgstAmount ? `₹${parseFloat(sgstAmount).toFixed(2)}` : "₹0.00"}</span>
+                    <span>{matchedPO ? formatRupees(matchedPO.approved_sgst_paise || 0) : "—"}</span>
+                    <span style={{ fontSize: "11px" }}>
+                      {matchedPO
+                        ? Math.abs(Math.round((parseFloat(sgstAmount) || 0) * 100) - (matchedPO.approved_sgst_paise || 0)) <= 100
+                          ? <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Within baseline</span>
+                          : <span style={{ color: "var(--amber)", fontWeight: 600 }}>⚠ Differs from PO</span>
+                        : "—"}
+                    </span>
+                  </div>
+
+                  {/* UTGST */}
+                  <div className="table-row" style={{ fontSize: "12px", padding: "8px 12px" }}>
+                    <span>UTGST (Union Territory Tax)</span>
+                    <span>{utgstAmount ? `₹${parseFloat(utgstAmount).toFixed(2)}` : "₹0.00"}</span>
+                    <span>{matchedPO ? formatRupees(matchedPO.approved_utgst_paise || 0) : "—"}</span>
+                    <span style={{ fontSize: "11px" }}>
+                      {matchedPO
+                        ? Math.abs(Math.round((parseFloat(utgstAmount) || 0) * 100) - (matchedPO.approved_utgst_paise || 0)) <= 100
+                          ? <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Within baseline</span>
+                          : <span style={{ color: "var(--amber)", fontWeight: 600 }}>⚠ Differs from PO</span>
+                        : "—"}
+                    </span>
+                  </div>
+
+                  {/* IGST */}
+                  <div className="table-row" style={{ fontSize: "12px", padding: "8px 12px" }}>
+                    <span>IGST (Integrated Tax)</span>
+                    <span>{igstAmount ? `₹${parseFloat(igstAmount).toFixed(2)}` : "₹0.00"}</span>
+                    <span>{matchedPO ? formatRupees(matchedPO.approved_igst_paise || 0) : "—"}</span>
+                    <span style={{ fontSize: "11px" }}>
+                      {matchedPO
+                        ? Math.abs(Math.round((parseFloat(igstAmount) || 0) * 100) - (matchedPO.approved_igst_paise || 0)) <= 100
+                          ? <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Within baseline</span>
+                          : <span style={{ color: "var(--amber)", fontWeight: 600 }}>⚠ Differs from PO</span>
+                        : "—"}
+                    </span>
+                  </div>
+
+                  {/* Cess */}
+                  <div className="table-row" style={{ fontSize: "12px", padding: "8px 12px" }}>
+                    <span>GST Compensation Cess</span>
+                    <span>{cessAmount ? `₹${parseFloat(cessAmount).toFixed(2)}` : "₹0.00"}</span>
+                    <span>{matchedPO ? formatRupees(matchedPO.approved_cess_paise || 0) : "—"}</span>
+                    <span style={{ fontSize: "11px" }}>
+                      {matchedPO
+                        ? Math.abs(Math.round((parseFloat(cessAmount) || 0) * 100) - (matchedPO.approved_cess_paise || 0)) <= 100
+                          ? <span style={{ color: "var(--green)", fontWeight: 600 }}>✓ Within baseline</span>
+                          : <span style={{ color: "var(--amber)", fontWeight: 600 }}>⚠ Differs from PO</span>
+                        : "—"}
+                    </span>
+                  </div>
+
+                  {/* Total Reconciliation Row */}
+                  <div className="table-row" style={{ background: "var(--surface-soft)", fontWeight: 700, padding: "10px 12px", borderTop: "2px solid var(--line)" }}>
+                    <span>Total Tax Reconciliation</span>
+                    <span>
+                      {verification?.gst_checks?.components
+                        ? `₹${(verification.gst_checks.components.sum_components_paise / 100).toFixed(2)}`
+                        : `₹${((parseFloat(cgstAmount) || 0) + (parseFloat(sgstAmount) || 0) + (parseFloat(utgstAmount) || 0) + (parseFloat(igstAmount) || 0) + (parseFloat(cessAmount) || 0)).toFixed(2)}`}
+                    </span>
+                    <span>
+                      Declared: ₹{(parseFloat(gstAmount) || 0).toFixed(2)}
+                    </span>
+                    <span>
+                      {verification?.gst_checks?.components ? (
+                        verification.gst_checks.components.within_tolerance ? (
+                          <span style={{ color: "var(--green)" }}>✓ TAX TOTAL MATCH (tol. ₹1.00)</span>
+                        ) : (
+                          <span style={{ color: "var(--red)" }}>
+                            ⚠ MISMATCH: Diff ₹{(Math.abs(verification.gst_checks.components.difference_paise) / 100).toFixed(2)}
+                          </span>
+                        )
+                      ) : (
+                        Math.abs(((parseFloat(cgstAmount) || 0) + (parseFloat(sgstAmount) || 0) + (parseFloat(utgstAmount) || 0) + (parseFloat(igstAmount) || 0) + (parseFloat(cessAmount) || 0)) - (parseFloat(gstAmount) || 0)) <= 1.0 ? (
+                          <span style={{ color: "var(--green)" }}>✓ TAX TOTAL MATCH</span>
+                        ) : (
+                          <span style={{ color: "var(--amber)" }}>⚠ Components ≠ Declared GST</span>
+                        )
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* GST Discrepancy Findings (if any) */}
+                {verification?.gst_checks?.findings && verification.gst_checks.findings.length > 0 && (
+                  <div style={{ marginBottom: "14px", border: "1px solid rgba(184, 117, 25, 0.3)", borderRadius: "10px", padding: "12px", background: "rgba(184, 117, 25, 0.05)" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                      <Icon name="risk" />
+                      <strong style={{ fontSize: "12px", color: "var(--text)" }}>GST Integrity Findings ({verification.gst_checks.findings.length})</strong>
+                    </div>
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      {verification.gst_checks.findings.map((f, idx) => (
+                        <div key={`${f.finding_code}-${idx}`} style={{ padding: "8px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "11px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
+                            <strong style={{ color: f.severity === "CRITICAL" ? "var(--red)" : f.severity === "WARNING" ? "var(--amber)" : "var(--muted)" }}>
+                              [{f.finding_code}] {f.field_name.toUpperCase()}
+                            </strong>
+                            <span className={`status-badge ${f.severity === "CRITICAL" ? "hold-status" : f.severity === "WARNING" ? "pending-status" : ""}`} style={{ fontSize: "9px" }}>
+                              {f.severity}
+                            </span>
+                          </div>
+                          <p style={{ margin: "2px 0 4px", color: "var(--text)", lineHeight: 1.4 }}>{f.explanation}</p>
+                          <span style={{ color: "var(--green)", fontWeight: 600, fontSize: "10px" }}>Action: {f.recommended_action}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Statutory Disclaimers */}
+                <div style={{ display: "grid", gap: "6px", fontSize: "10px", color: "var(--muted)", borderTop: "1px dashed var(--line)", paddingTop: "10px", lineHeight: 1.4 }}>
+                  <div>
+                    <strong>Disclaimer 1 (Portal Non-Verification):</strong> Syntactic structure and Luhn mod 36 checksum validation confirms format adherence only. FinTrust AI does not scrape or integrate with the government GST Portal (gst.gov.in) and makes no claims regarding whether the registration is active, suspended, or cancelled.
+                  </div>
+                  <div>
+                    <strong>Disclaimer 2 (Standard Domestic Scope):</strong> Automated tax classification applies standard domestic supply rules (Sections 7, 8, 10, 12 IGST Act). Complex transactions (SEZ supplies, exports/imports, reverse charge) require manual tax specialist review.
+                  </div>
+                </div>
+              </div>
 
               {/* Supporting Evidence Presentation with Quotes & AI Confidence */}
               {extractionData?.fields && (

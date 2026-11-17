@@ -17,7 +17,7 @@ def list_vendors(db_path: str | Path | None = None) -> list[dict[str, Any]]:
     with get_connection(db_path) as connection:
         rows = connection.execute(
             """
-            SELECT id, vendor_code, name, bank_account_ref, is_active, created_at
+            SELECT id, vendor_code, name, bank_account_ref, is_active, gstin, gstin_verification_status, created_at
             FROM vendors
             ORDER BY id
             """
@@ -40,6 +40,14 @@ def list_purchase_orders(db_path: str | Path | None = None) -> list[dict[str, An
                 po.approved_line_items,
                 po.status,
                 po.issue_date,
+                po.recipient_gstin,
+                po.place_of_supply_state_code,
+                po.gst_transaction_profile,
+                po.approved_cgst_paise,
+                po.approved_sgst_paise,
+                po.approved_utgst_paise,
+                po.approved_igst_paise,
+                po.approved_cess_paise,
                 po.created_at
             FROM purchase_orders AS po
             JOIN vendors AS v ON v.id = po.vendor_id
@@ -65,6 +73,15 @@ def list_invoices(db_path: str | Path | None = None) -> list[dict[str, Any]]:
                 invoice_bank_account_ref,
                 decision,
                 risk_level,
+                supplier_gstin,
+                recipient_gstin,
+                place_of_supply_state_code,
+                cgst_paise,
+                sgst_paise,
+                utgst_paise,
+                igst_paise,
+                cess_paise,
+                gst_validation_status,
                 created_at
             FROM invoices
             ORDER BY created_at, id
@@ -96,6 +113,15 @@ def insert_invoice(
     invoice_bank_account_ref: str | None = None,
     decision: str | None = None,
     risk_level: str | None = None,
+    supplier_gstin: str | None = None,
+    recipient_gstin: str | None = None,
+    place_of_supply_state_code: str | None = None,
+    cgst_paise: int = 0,
+    sgst_paise: int = 0,
+    utgst_paise: int = 0,
+    igst_paise: int = 0,
+    cess_paise: int = 0,
+    gst_validation_status: str | None = None,
     db_path: str | Path | None = None,
 ) -> int:
     normalized_number = normalize_invoice_number(invoice_number)
@@ -116,9 +142,18 @@ def insert_invoice(
                 invoice_bank_account_ref,
                 decision,
                 risk_level,
+                supplier_gstin,
+                recipient_gstin,
+                place_of_supply_state_code,
+                cgst_paise,
+                sgst_paise,
+                utgst_paise,
+                igst_paise,
+                cess_paise,
+                gst_validation_status,
                 created_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 invoice_number,
@@ -131,6 +166,15 @@ def insert_invoice(
                 invoice_bank_account_ref,
                 decision,
                 risk_level,
+                supplier_gstin,
+                recipient_gstin,
+                place_of_supply_state_code,
+                cgst_paise,
+                sgst_paise,
+                utgst_paise,
+                igst_paise,
+                cess_paise,
+                gst_validation_status,
                 _created_at(),
             ),
         )
