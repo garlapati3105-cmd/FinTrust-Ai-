@@ -78,7 +78,7 @@ While OCR and document matching tools exist in isolation, FinTrust AI bridges th
 | **No AI-Initiated Approval** | AI extractor outputs draft JSON field suggestions; authoritative verification decisions are computed solely by the backend deterministic verification engine via `POST /api/verify-invoice` upon human submission. | Eliminates unsupervised AI actions and hallucinated approvals. |
 | **Integer-Paise Precision** | All monetary amounts use Python `Decimal` and persist as integer paise (`₹1.00 = 100 paise`). | Prevents floating-point rounding errors and precision leaks. |
 | **Zero Client Authority** | The frontend submits only what the invoice claims; approved purchase order values and vendor bank references are queried directly from the server database. | Prevents client-side tampering of approved budgets or GST rates. |
-| **India GST Integrity Engine** | Validates 15-character GSTINs via Luhn mod 36, identifies State/UT codes, enforces Sections 7 & 8 of the IGST Act (CGST+SGST/UTGST vs IGST), and reconciles component breakdowns within ₹1.00 tolerance. | Prevents tax-type misclassification and invalid GST filings. |
+| **India GST Integrity Engine** | Validates 15-character GSTINs via Luhn mod 36, identifies State/UT codes, enforces Sections 7 & 8 of the IGST Act (CGST+SGST/UTGST vs IGST), and reconciles component breakdowns within internal ₹1.00 business tolerance. | Prevents tax-type misclassification and invalid GST filings. |
 | **Bidirectional Grounding** | Verifies quote presence in document text, page containment, and value substantiation within the quote. | Prevents models from citing unrelated text to justify hallucinated figures. |
 | **Application-Level Append-Only Audit Trail** | The application backend exposes strictly append-only `INSERT` operations for audit events with no `UPDATE` or `DELETE` API endpoints or repository methods. | Maintains an immutable operational ledger for financial reviews. (See limitations regarding direct database-file access). |
 
@@ -262,16 +262,16 @@ python evaluation/scripts/run_evaluation.py
 
 ## 🔬 Automated Testing & Regression Suite
 
-The project includes **105 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
+The project includes **112 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
 
 ```powershell
 pytest backend/tests -q
-........................................................................ [ 68%]
-.................................                                        [100%]
-105 passed in 32.58s
+........................................................................ [ 64%]
+........................................                                 [100%]
+112 passed in 66.14s
 ```
 
-- **`test_gst_integrity.py` (37 tests):** India GST Integrity Engine validation: 15-character GSTIN structure, official 38 State/UT catalogue, SGST vs UTGST distinction (Delhi/Puducherry/J&K vs Chandigarh/Ladakh/Dadra), Luhn mod 36 positive/negative checksum calculation, intra-state vs inter-state tax classification, component reconciliation (CGST, SGST, UTGST, IGST, Cess), ₹1.00 rounding tolerance, and full end-to-end API verification.
+- **`test_gst_integrity.py` (44 tests):** India GST Integrity Engine validation: 15-character GSTIN structure, official 38 State/UT catalogue, SGST vs UTGST distinction (Delhi/Puducherry/J&K vs Chandigarh/Ladakh/Dadra), Luhn mod 36 positive/negative checksum calculation, intra-state vs inter-state tax classification, component reconciliation (CGST, SGST, UTGST, IGST, Cess), internal ₹1.00 rounding tolerance boundaries, reverse state/UT name resolution (e.g. "Maharashtra" → "27"), taxable PO bypass protection, exempt/non-GST approvals, and full end-to-end API verification.
 - **`test_database.py` (13 tests):** Schema initialization, integer-paise conversions, foreign key constraints, unique vendor/normalized invoice constraints, and append-only audit event logging.
 - **`test_verification.py` (21 tests):** Clean matches, amount variances, GST mismatches, line-item mismatches, inactive/unknown vendors, duplicate submissions, and missing required fields.
 - **`test_document_extraction.py` (19 tests):** Magic byte validation, upload limits, PyMuPDF extraction, RapidOCR fallback, prompt-injection scanner, evidence quote verification, and API key absence fallback.

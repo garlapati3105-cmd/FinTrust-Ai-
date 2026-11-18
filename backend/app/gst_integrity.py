@@ -13,11 +13,11 @@ Dedicated module for Indian Goods and Services Tax (GST) verification:
 8. Defense-in-depth safety flags for special cases requiring manual human review.
 
 Statutory and Technical References:
-- CGST Rules, 2017, Rule 10: Structure of GSTIN (State code + PAN/TAN + Entity code + Checksum).
+- CGST Rules, 2017, Rule 10(1) & CGST Act, 2017, Section 25(12): Issuance of registration certificate (FORM GST REG-06) and 15-character GSTIN structure.
 - CGST Rules, 2017, Rule 46: Mandatory tax invoice particulars.
 - IGST Act, 2017, Section 7: Inter-state supplies.
 - IGST Act, 2017, Section 8: Intra-state supplies.
-- IGST Act, 2017, Sections 10 & 12: Place of supply for goods and services.
+- IGST Act, 2017, Sections 10 & 12: Principles for place of supply for goods and services (baseline declared verification).
 - Union Territory Goods and Services Tax Act, 2017 (UTGST Act), Section 1(2).
 """
 
@@ -80,10 +80,146 @@ STATE_CATALOGUE: dict[str, dict[str, Any]] = {
     "99": {"name": "Centre Jurisdiction / Special", "tax_type": "IGST", "is_ut": False},
 }
 
+# Reverse mapping from state/UT names and verified abbreviations to official 2-digit GST state codes.
+# Case-insensitive normalization and verified official aliases supported.
+# Never guesses unknown or ambiguous locations.
+STATE_NAME_TO_CODE: dict[str, str] = {
+    # Full official state & UT names (lowercase)
+    "jammu and kashmir": "01",
+    "jammu & kashmir": "01",
+    "himachal pradesh": "02",
+    "punjab": "03",
+    "chandigarh": "04",
+    "uttarakhand": "05",
+    "uttaranchal": "05",
+    "haryana": "06",
+    "delhi": "07",
+    "new delhi": "07",
+    "nct of delhi": "07",
+    "national capital territory of delhi": "07",
+    "rajasthan": "08",
+    "uttar pradesh": "09",
+    "bihar": "10",
+    "sikkim": "11",
+    "arunachal pradesh": "12",
+    "nagaland": "13",
+    "manipur": "14",
+    "mizoram": "15",
+    "tripura": "16",
+    "meghalaya": "17",
+    "assam": "18",
+    "west bengal": "19",
+    "jharkhand": "20",
+    "odisha": "21",
+    "orissa": "21",
+    "chhattisgarh": "22",
+    "chattisgarh": "22",
+    "madhya pradesh": "23",
+    "gujarat": "24",
+    "daman and diu": "26",
+    "daman & diu": "26",
+    "dadra and nagar haveli and daman and diu": "26",
+    "dadra & nagar haveli and daman & diu": "26",
+    "dnh and dd": "26",
+    "dnh & dd": "26",
+    "maharashtra": "27",
+    "andhra pradesh (former)": "28",
+    "karnataka": "29",
+    "goa": "30",
+    "lakshadweep": "31",
+    "kerala": "32",
+    "tamil nadu": "33",
+    "tamilnadu": "33",
+    "puducherry": "34",
+    "pondicherry": "34",
+    "andaman and nicobar islands": "35",
+    "andaman & nicobar islands": "35",
+    "andaman and nicobar": "35",
+    "andaman & nicobar": "35",
+    "telangana": "36",
+    "andhra pradesh": "37",
+    "ladakh": "38",
+    "other territory": "97",
+    "centre jurisdiction": "99",
+    "centre jurisdiction / special": "99",
+    # Verified common 2-letter state abbreviations
+    "jk": "01",
+    "hp": "02",
+    "pb": "03",
+    "ch": "04",
+    "uk": "05",
+    "ua": "05",
+    "hr": "06",
+    "dl": "07",
+    "rj": "08",
+    "up": "09",
+    "br": "10",
+    "sk": "11",
+    "ar": "12",
+    "nl": "13",
+    "mn": "14",
+    "mz": "15",
+    "tr": "16",
+    "ml": "17",
+    "as": "18",
+    "wb": "19",
+    "jh": "20",
+    "od": "21",
+    "or": "21",
+    "cg": "22",
+    "ct": "22",
+    "mp": "23",
+    "gj": "24",
+    "dd": "26",
+    "dn": "26",
+    "mh": "27",
+    "ka": "29",
+    "ga": "30",
+    "ld": "31",
+    "kl": "32",
+    "tn": "33",
+    "py": "34",
+    "an": "35",
+    "ts": "36",
+    "tg": "36",
+    "ap": "37",
+    "la": "38",
+}
+
+
+def resolve_state_code(value: str | None) -> str | None:
+    """
+    Resolve a state/UT name, abbreviation, or numeric string to a 2-digit GST state code.
+    Returns normalized 2-digit code if recognized, otherwise None.
+    Never guesses unknown or ambiguous locations.
+    """
+    if not value:
+        return None
+    val = value.strip()
+    if not val:
+        return None
+
+    # Handle 1-digit state code (e.g. "7" -> "07")
+    if len(val) == 1 and val.isdigit():
+        val = f"0{val}"
+
+    # If already a valid 2-digit code in the catalogue
+    if val in STATE_CATALOGUE:
+        return val
+
+    # Normalize name/alias: lowercase, normalize separators
+    norm = val.lower().replace("&", "and").replace(".", "").replace("-", " ")
+    norm = " ".join(norm.split())
+
+    return STATE_NAME_TO_CODE.get(norm)
+
+
 # Transaction profiles supported by the engine
 GST_PROFILE_STANDARD_DOMESTIC = "STANDARD_DOMESTIC"
 GST_PROFILE_SPECIAL_CASE_REVIEW = "SPECIAL_CASE_REVIEW"
 GST_PROFILE_NOT_CONFIGURED = "NOT_CONFIGURED"
+GST_PROFILE_EXEMPT = "EXEMPT"
+GST_PROFILE_NON_GST = "NON_GST"
 
 # Standard validation result codes
 RESULT_FORMAT_VALID = "FORMAT_VALID"
@@ -105,7 +241,7 @@ SEVERITY_MEDIUM = "medium"
 SEVERITY_LOW = "low"
 SEVERITY_INFO = "info"
 
-# Rounding tolerance for component sum vs total GST (100 paise = ₹1.00)
+# Internal business rule rounding tolerance for component sum vs total GST (100 paise = ₹1.00)
 GST_SUM_TOLERANCE_PAISE = 100
 
 # Disclaimer required by Phase 2 & Phase 11
@@ -350,6 +486,7 @@ def extract_state_code(gstin: str | None) -> str | None:
 def match_supplier_gstin(
     invoice_gstin: str | None,
     trusted_gstin: str | None,
+    profile: str = GST_PROFILE_STANDARD_DOMESTIC,
 ) -> tuple[dict[str, Any], GSTFinding | None]:
     """
     Compare invoice supplier GSTIN against trusted vendor master GSTIN.
@@ -360,6 +497,25 @@ def match_supplier_gstin(
     val_res = validate_gstin(norm_inv) if norm_inv else None
 
     if not norm_inv:
+        if profile in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST):
+            finding = GSTFinding(
+                finding_code="exempt_supplier_gstin_not_required",
+                severity=SEVERITY_INFO,
+                status=STATUS_PASS,
+                field_name="supplier_gstin",
+                invoice_value=None,
+                trusted_value=mask_gstin(norm_trusted) if norm_trusted else None,
+                explanation="Supplier GSTIN is not mandatory on exempt or non-GST supplies.",
+                recommended_action="No action required.",
+            )
+            return {
+                "status": STATUS_PASS,
+                "matched": True,
+                "validation": None,
+                "invoice_gstin": None,
+                "trusted_gstin": norm_trusted,
+            }, finding
+
         finding = GSTFinding(
             finding_code="supplier_gstin_missing",
             severity=SEVERITY_HIGH,
@@ -512,6 +668,25 @@ def match_recipient_gstin(
 
     # PO mandates a recipient GSTIN
     if not norm_inv:
+        if profile in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST):
+            finding = GSTFinding(
+                finding_code="exempt_recipient_gstin_not_required",
+                severity=SEVERITY_INFO,
+                status=STATUS_PASS,
+                field_name="recipient_gstin",
+                invoice_value=None,
+                trusted_value=mask_gstin(norm_trusted) if norm_trusted else None,
+                explanation="Recipient GSTIN is not mandatory on exempt supplies.",
+                recommended_action="No action required.",
+            )
+            return {
+                "status": STATUS_PASS,
+                "matched": True,
+                "validation": None,
+                "invoice_gstin": None,
+                "trusted_gstin": norm_trusted,
+            }, finding
+
         finding = GSTFinding(
             finding_code="recipient_gstin_missing",
             severity=SEVERITY_HIGH,
@@ -593,12 +768,19 @@ def match_recipient_gstin(
 def match_place_of_supply(
     invoice_pos_code: str | None,
     po_pos_code: str | None,
+    profile: str = GST_PROFILE_STANDARD_DOMESTIC,
 ) -> tuple[dict[str, Any], GSTFinding | None]:
     """
-    Compare invoice place of supply against PO-confirmed place of supply.
+    Compare invoice declared place of supply against PO-confirmed place of supply baseline.
+    Resolves recognized state names and abbreviations to 2-digit state codes.
+    Never guesses unknown or ambiguous locations.
     """
-    norm_inv_pos = invoice_pos_code.strip() if invoice_pos_code else None
-    norm_po_pos = po_pos_code.strip() if po_pos_code else None
+    raw_inv = invoice_pos_code.strip() if invoice_pos_code else None
+    raw_po = po_pos_code.strip() if po_pos_code else None
+
+    # Resolve state names / abbreviations to 2-digit state codes
+    norm_inv_pos = resolve_state_code(raw_inv) or raw_inv
+    norm_po_pos = resolve_state_code(raw_po) or raw_po
 
     # Pad single-digit state code if needed (e.g. '7' -> '07')
     if norm_inv_pos and len(norm_inv_pos) == 1 and norm_inv_pos.isdigit():
@@ -606,8 +788,8 @@ def match_place_of_supply(
     if norm_po_pos and len(norm_po_pos) == 1 and norm_po_pos.isdigit():
         norm_po_pos = f"0{norm_po_pos}"
 
-    inv_state_name = STATE_CATALOGUE.get(norm_inv_pos, {}).get("name") if norm_inv_pos else None
-    po_state_name = STATE_CATALOGUE.get(norm_po_pos, {}).get("name") if norm_po_pos else None
+    inv_state_name = STATE_CATALOGUE.get(norm_inv_pos, {}).get("name") if (norm_inv_pos and norm_inv_pos in STATE_CATALOGUE) else None
+    po_state_name = STATE_CATALOGUE.get(norm_po_pos, {}).get("name") if (norm_po_pos and norm_po_pos in STATE_CATALOGUE) else None
 
     if not norm_po_pos:
         finding = GSTFinding(
@@ -615,7 +797,7 @@ def match_place_of_supply(
             severity=SEVERITY_MEDIUM,
             status=STATUS_MANUAL_REVIEW_REQUIRED,
             field_name="place_of_supply_state_code",
-            invoice_value=norm_inv_pos,
+            invoice_value=raw_inv,
             trusted_value=None,
             explanation="Purchase order does not have a confirmed place-of-supply state code configured.",
             recommended_action="Finance reviewer must confirm delivery location and set PO place of supply.",
@@ -628,6 +810,24 @@ def match_place_of_supply(
         }, finding
 
     if not norm_inv_pos:
+        if profile in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST):
+            finding = GSTFinding(
+                finding_code="exempt_pos_not_required",
+                severity=SEVERITY_INFO,
+                status=STATUS_PASS,
+                field_name="place_of_supply_state_code",
+                invoice_value=None,
+                trusted_value=f"{norm_po_pos} ({po_state_name})" if po_state_name else norm_po_pos,
+                explanation="Place of supply is not strictly evaluated on exempt transactions without tax.",
+                recommended_action="No action required.",
+            )
+            return {
+                "status": STATUS_PASS,
+                "matched": True,
+                "invoice_pos": None,
+                "po_pos": norm_po_pos,
+            }, finding
+
         finding = GSTFinding(
             finding_code="invoice_place_of_supply_missing",
             severity=SEVERITY_MEDIUM,
@@ -642,6 +842,25 @@ def match_place_of_supply(
             "status": STATUS_MISSING,
             "matched": False,
             "invoice_pos": None,
+            "po_pos": norm_po_pos,
+        }, finding
+
+    # Check for unrecognized / invalid state code or unknown location name
+    if norm_inv_pos not in STATE_CATALOGUE:
+        finding = GSTFinding(
+            finding_code="invalid_state_code",
+            severity=SEVERITY_HIGH,
+            status=STATUS_MISMATCH,
+            field_name="place_of_supply_state_code",
+            invoice_value=raw_inv,
+            trusted_value=f"{norm_po_pos} ({po_state_name})" if po_state_name else norm_po_pos,
+            explanation=f"State identifier '{raw_inv}' is not a recognized Indian State or Union Territory.",
+            recommended_action="Correct Place of Supply to a valid Indian State or Union Territory.",
+        )
+        return {
+            "status": STATUS_MISMATCH,
+            "matched": False,
+            "invoice_pos": norm_inv_pos,
             "po_pos": norm_po_pos,
         }, finding
 
@@ -694,6 +913,25 @@ def classify_tax_type(
     - Intra-State: supplier_state == po_pos_state -> CGST + SGST (or CGST + UTGST for non-legislative UTs)
     - Inter-State: supplier_state != po_pos_state -> IGST
     """
+    if profile in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST):
+        finding = GSTFinding(
+            finding_code="exempt_supply_profile",
+            severity=SEVERITY_INFO,
+            status=STATUS_PASS,
+            field_name="gst_transaction_profile",
+            invoice_value=None,
+            trusted_value=profile,
+            explanation=f"Purchase order is designated as {profile}. Zero GST is expected.",
+            recommended_action="Verify invoice does not charge tax.",
+        )
+        return {
+            "status": STATUS_PASS,
+            "profile": profile,
+            "tax_type": "EXEMPT",
+            "expected_components": [],
+            "explanation": f"{profile} supply - zero GST expected.",
+        }, finding
+
     if profile == GST_PROFILE_SPECIAL_CASE_REVIEW:
         finding = GSTFinding(
             finding_code="special_case_profile_review_required",
@@ -732,7 +970,10 @@ def classify_tax_type(
             "explanation": "Profile not configured.",
         }, finding
 
-    if not supplier_state_code or not po_pos_state_code:
+    resolved_supp = resolve_state_code(supplier_state_code) or supplier_state_code
+    resolved_pos = resolve_state_code(po_pos_state_code) or po_pos_state_code
+
+    if not resolved_supp or not resolved_pos:
         finding = GSTFinding(
             finding_code="tax_classification_inputs_missing",
             severity=SEVERITY_MEDIUM,
@@ -751,8 +992,8 @@ def classify_tax_type(
             "explanation": "Missing state codes.",
         }, finding
 
-    supp_info = STATE_CATALOGUE.get(supplier_state_code)
-    pos_info = STATE_CATALOGUE.get(po_pos_state_code)
+    supp_info = STATE_CATALOGUE.get(resolved_supp)
+    pos_info = STATE_CATALOGUE.get(resolved_pos)
 
     if not supp_info or not pos_info:
         finding = GSTFinding(
@@ -774,12 +1015,12 @@ def classify_tax_type(
         }, finding
 
     # Standard Domestic Logic:
-    if supplier_state_code == po_pos_state_code:
+    if resolved_supp == resolved_pos:
         # Intra-State Supply
         ut_tax_type = pos_info["tax_type"]  # "SGST" or "UTGST"
         expected_components = ["CGST", ut_tax_type]
         explanation = (
-            f"Intra-state supply within {pos_info['name']} ({po_pos_state_code}). "
+            f"Intra-state supply within {pos_info['name']} ({resolved_pos}). "
             f"Requires CGST + {ut_tax_type} under Section 8 of the IGST Act."
         )
         return {
@@ -794,8 +1035,8 @@ def classify_tax_type(
     # Inter-State Supply
     expected_components = ["IGST"]
     explanation = (
-        f"Inter-state supply from {supp_info['name']} ({supplier_state_code}) "
-        f"to {pos_info['name']} ({po_pos_state_code}). "
+        f"Inter-state supply from {supp_info['name']} ({resolved_supp}) "
+        f"to {pos_info['name']} ({resolved_pos}). "
         f"Requires IGST under Section 7 of the IGST Act."
     )
     return {
@@ -833,6 +1074,35 @@ def validate_tax_components(
     po_utgst = po_components.get("utgst", 0)
     po_igst = po_components.get("igst", 0)
     po_cess = po_components.get("cess", 0)
+
+    # 0. Exempt supply checks
+    if tax_type == "EXEMPT":
+        total_tax_charged = inv_cgst + inv_sgst + inv_utgst + inv_igst + inv_cess
+        if total_tax_charged > 0:
+            findings.append(
+                GSTFinding(
+                    finding_code="prohibited_tax_on_exempt_supply",
+                    severity=SEVERITY_HIGH,
+                    status=STATUS_MISMATCH,
+                    field_name="gst_amount",
+                    invoice_value=f"₹{from_paise(total_tax_charged):,.2f}",
+                    trusted_value="₹0.00 (Exempt)",
+                    explanation="Invoice incorrectly charges GST for an exempt or non-GST supply.",
+                    recommended_action="Hold invoice; request supplier reissue invoice without tax.",
+                )
+            )
+        return {
+            "status": STATUS_MISMATCH if findings else STATUS_PASS,
+            "matched": len(findings) == 0,
+            "components_checked": {
+                "cgst": inv_cgst,
+                "sgst": inv_sgst,
+                "utgst": inv_utgst,
+                "igst": inv_igst,
+                "cess": inv_cess,
+            },
+            "findings_count": len(findings),
+        }, findings
 
     # 1. Prohibited component checks
     if tax_type == "INTRA_STATE":
@@ -1034,9 +1304,9 @@ def reconcile_gst_totals(
             trusted_value=f"₹{from_paise(component_sum):,.2f}",
             explanation=(
                 f"Minor component sum rounding difference of ₹{from_paise(abs(variance)):,.2f} "
-                f"is within the accepted threshold of ₹{from_paise(tolerance_paise):,.2f}."
+                f"is within internal business tolerance of ₹{from_paise(tolerance_paise):,.2f}."
             ),
-            recommended_action="No action required; minor round-off accepted.",
+            recommended_action="No action required; minor round-off accepted under business tolerance rules.",
         )
         return {
             "status": STATUS_PASS,
@@ -1092,7 +1362,9 @@ def evaluate_gst_integrity(
     all_findings: list[GSTFinding] = []
 
     # 1. Supplier GSTIN match and structure
-    supp_res, supp_finding = match_supplier_gstin(invoice_supplier_gstin, trusted_supplier_gstin)
+    supp_res, supp_finding = match_supplier_gstin(
+        invoice_supplier_gstin, trusted_supplier_gstin, profile=gst_profile
+    )
     if supp_finding:
         all_findings.append(supp_finding)
 
@@ -1104,7 +1376,9 @@ def evaluate_gst_integrity(
         all_findings.append(recip_finding)
 
     # 3. Place of supply match
-    pos_res, pos_finding = match_place_of_supply(invoice_pos_code, po_pos_code)
+    pos_res, pos_finding = match_place_of_supply(
+        invoice_pos_code, po_pos_code, profile=gst_profile
+    )
     if pos_finding:
         all_findings.append(pos_finding)
 

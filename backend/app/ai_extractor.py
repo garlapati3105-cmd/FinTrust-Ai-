@@ -90,19 +90,24 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
     Server-side verification of evidence binding:
     Checks that the extracted field value is actually substantiated by the evidence quote.
     Prevents adversarial or hallucinated values where the quote exists elsewhere in the document.
+    Rejects empty, whitespace-only, or normalized empty/punctuation-only values.
     """
     if value is None or evidence_quote is None:
         return False
+    raw_val = str(value).strip()
+    if not raw_val:
+        return False
+
     norm_quote = _normalize_search_text(str(evidence_quote))
     if not norm_quote:
         return False
 
     if key in ("invoice_total", "gst_amount", "cgst_amount", "sgst_amount", "utgst_amount", "igst_amount", "cess_amount"):
         try:
-            d = Decimal(str(value))
+            d = Decimal(raw_val)
             rupees = int(d)
             patterns = [
-                str(value),
+                raw_val,
                 f"{rupees}",
                 f"{rupees:,}",
                 f"{d:.2f}",
@@ -113,36 +118,47 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
                 if norm_p and norm_p in norm_quote:
                     return True
             digits_only_quote = re.sub(r"[^\d.]", "", norm_quote)
-            if str(value) in digits_only_quote or f"{rupees}" in digits_only_quote:
+            if digits_only_quote and (raw_val in digits_only_quote or f"{rupees}" in digits_only_quote):
                 return True
             return False
         except (InvalidOperation, ValueError):
-            return _normalize_search_text(str(value)) in norm_quote
+            norm_val = _normalize_search_text(raw_val)
+            return bool(norm_val and norm_val in norm_quote)
 
     elif key in ("supplier_gstin", "recipient_gstin"):
-        norm_val = re.sub(r"[^a-zA-Z0-9]", "", str(value)).lower()
+        norm_val = re.sub(r"[^a-zA-Z0-9]", "", raw_val).lower()
+        if not norm_val:
+            return False
         norm_q_clean = re.sub(r"[^a-zA-Z0-9]", "", str(evidence_quote)).lower()
         return norm_val in norm_q_clean
 
     elif key == "place_of_supply_state_code":
-        val_str = str(value).strip().lower()
+        val_str = raw_val.lower()
+        norm_val = _normalize_search_text(raw_val)
+        if not norm_val:
+            return False
         tokens = re.findall(r"\b\w+\b", norm_quote)
-        return val_str in tokens or val_str in norm_quote
+        return val_str in tokens or norm_val in norm_quote
 
     elif key == "line_items":
-        val_str = str(value).strip()
+        if not raw_val.isdigit():
+            return False
         tokens = re.findall(r"\b\d+\b", norm_quote)
-        if val_str in tokens:
+        if raw_val in tokens:
             return True
         digits = re.findall(r"\d+", norm_quote)
-        return val_str in digits
+        return bool(digits and raw_val in digits)
 
     elif key in ("invoice_number", "po_number", "invoice_bank_account_ref"):
-        norm_val = _normalize_search_text(str(value))
+        norm_val = _normalize_search_text(raw_val)
+        if not norm_val:
+            return False
         return norm_val in norm_quote
 
     elif key == "vendor_name":
-        norm_val = _normalize_search_text(str(value))
+        norm_val = _normalize_search_text(raw_val)
+        if not norm_val:
+            return False
         if norm_val in norm_quote:
             return True
         words = [w for w in re.split(r"\W+", norm_val) if len(w) > 2]
@@ -150,7 +166,10 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
             return True
         return False
 
-    return _normalize_search_text(str(value)) in norm_quote
+    norm_val = _normalize_search_text(raw_val)
+    if not norm_val:
+        return False
+    return norm_val in norm_quote
 
 
 def _format_monetary_string(val: Any) -> str | None:

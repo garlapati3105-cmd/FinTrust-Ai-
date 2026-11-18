@@ -214,6 +214,11 @@ def test_authoritative_verification_clean_invoice(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res = verify_and_record_invoice(req)
     assert res["decision"] == "APPROVE"
@@ -261,6 +266,11 @@ def test_authoritative_verification_duplicate_prevention(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res1 = verify_and_record_invoice(req1)
     assert res1["decision"] == "APPROVE"
@@ -275,6 +285,11 @@ def test_authoritative_verification_duplicate_prevention(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res2 = verify_and_record_invoice(req2)
     assert res2["decision"] == "HOLD"

@@ -18,7 +18,7 @@ The engine does not guess or use generative models for financial rules. Instead,
 
 The GST Integrity Engine implements codified rules from Indian tax statutes:
 
-- **Rule 10, Central Goods and Services Tax (CGST) Rules, 2017**: Specifies the 15-character alphanumeric Goods and Services Tax Identification Number (GSTIN) structure:
+- **Rule 10(1), Central Goods and Services Tax (CGST) Rules, 2017** (read with Section 25(12) of the CGST Act, 2017): Governs the issuance of the certificate of registration in FORM GST REG-06 and defines the official 15-character alphanumeric Goods and Services Tax Identification Number (GSTIN) structure:
   - Characters 1–2: Two-digit State/UT code.
   - Characters 3–12: Ten-character Permanent Account Number (PAN) or Tax Deduction and Collection Account Number (TAN) of the entity.
   - Characters 13–14: Entity registration code.
@@ -26,14 +26,14 @@ The GST Integrity Engine implements codified rules from Indian tax statutes:
 - **Rule 46, CGST Rules, 2017**: Mandates tax invoice particulars, including supplier GSTIN, recipient GSTIN, place of supply, and individual component breakdowns for CGST, SGST, UTGST, IGST, and Cess.
 - **Section 7, Integrated Goods and Services Tax (IGST) Act, 2017**: Defines inter-state supplies where the location of the supplier and the place of supply are in different States, different Union Territories, or a State and a Union Territory. Inter-state supplies mandate Integrated Tax (IGST).
 - **Section 8, IGST Act, 2017**: Defines intra-state supplies where the location of the supplier and the place of supply are in the same State or same Union Territory. Intra-state supplies mandate Central Tax (CGST) and State Tax (SGST) or Union Territory Tax (UTGST).
-- **Sections 10 & 12, IGST Act, 2017**: Principles for determining the Place of Supply (POS) for goods and services.
+- **Sections 10 & 12, IGST Act, 2017**: Principles for determining the Place of Supply (POS) for goods and services. FinTrust AI performs evidence verification of the declared invoice POS against the confirmed Purchase Order delivery baseline; it does not legally adjudicate complex multi-party POS determination under Sections 10 through 14 of the IGST Act (such as bill-to/ship-to arrangements or complex cross-border scenarios).
 - **Section 1(2), Union Territory Goods and Services Tax (UTGST) Act, 2017**: Establishes UTGST for Union Territories without a legislative assembly.
 
 ---
 
 ## 3. State & Union Territory Catalogue
 
-The engine maintains a static, exhaustive catalogue of Indian States and Union Territories. Critically, it distinguishes between Union Territories with legislative assemblies (which levy SGST) and Union Territories without legislative assemblies (which levy UTGST):
+The engine maintains a static, exhaustive catalogue of official 2-digit Indian State and Union Territory GST codes issued under the GST framework. Critically, it distinguishes between Union Territories with legislative assemblies (which levy SGST) and Union Territories without legislative assemblies (which levy UTGST):
 
 | Code | State / Union Territory | Category | Applicable State Tax |
 | :--- | :--- | :--- | :--- |
@@ -98,14 +98,14 @@ The 15th character of every standard Indian GSTIN is a checksum calculated acros
 - All monetary arithmetic is strictly computed in **integer paise** ($1\text{ INR} = 100\text{ paise}$) using Python `Decimal` to avoid binary floating-point inaccuracy.
 - The engine reconciles:
   $$\text{Declared Total GST} \stackrel{?}{=} \text{CGST} + \text{SGST} + \text{UTGST} + \text{IGST} + \text{Cess}$$
-- **Statutory Rounding Tolerance**: Differences $\le 100\text{ paise}$ ($\le ₹1.00$) resulting from standard commercial item-level rounding are accepted with status `PASS` (`gst_total_rounding_tolerance`). Differences $> 100\text{ paise}$ trigger `HOLD` (`gst_component_sum_mismatch`).
+- **Internal Business Rounding Tolerance**: While Section 170 of the CGST Act permits rounding tax amounts to the nearest rupee, line-by-line commercial rounding in multi-item invoices often creates small fractional discrepancies against header totals. FinTrust AI enforces an internal business rule tolerance of $\le 100\text{ paise}$ ($\le ₹1.00$) between itemized component sums and declared total GST (`gst_total_rounding_tolerance`). Differences $> 100\text{ paise}$ trigger `HOLD` (`gst_component_sum_mismatch`). This ₹1.00 threshold is an internal verification policy, not a statutory tax margin.
 
 ---
 
 ## 6. Operational Boundaries & Mandatory Disclaimers
 
 ### Disclaimer 1: Offline Syntactic Validation Only
-> **Syntactic structure and Luhn mod 36 checksum validation confirms format adherence only. FinTrust AI does not scrape, bypass CAPTCHA, or integrate directly with the government GST Portal (gst.gov.in). Validation does not prove that a GSTIN is currently active, suspended, or cancelled by tax authorities.**
+> **Syntactic structure and Luhn mod 36 checksum validation confirms format adherence and catches transcription typos only. FinTrust AI operates entirely offline; it does not scrape, bypass CAPTCHA, or integrate directly with the government GST Portal (gst.gov.in). Checksum validity does not prove that a GSTIN is currently active, suspended, or cancelled by tax authorities.**
 
 ### Disclaimer 2: Standard Domestic Scope & Manual Review
 > **Automated tax classification applies standard domestic supply rules under Sections 7, 8, 10, and 12 of the IGST Act, 2017. Complex transactions (including Special Economic Zone / SEZ supplies, export/import transactions, and reverse charge mechanisms) require manual tax specialist review.**

@@ -9,6 +9,9 @@ from typing import Any
 from .database import get_connection
 from .financial import from_paise, normalize_invoice_number, to_paise
 from .gst_integrity import (
+    GST_PROFILE_EXEMPT,
+    GST_PROFILE_NON_GST,
+    GST_PROFILE_SPECIAL_CASE_REVIEW,
     GSTIntegrityReport,
     STATUS_MANUAL_REVIEW_REQUIRED,
     STATUS_MISMATCH,
@@ -212,6 +215,25 @@ def _evaluate(
     po_pos = po["place_of_supply_state_code"] if "place_of_supply_state_code" in po_keys else None
     gst_profile = po["gst_transaction_profile"] if "gst_transaction_profile" in po_keys and po["gst_transaction_profile"] else "STANDARD_DOMESTIC"
 
+    po_approved_gst_paise = int(po["approved_gst_paise"] or 0) if "approved_gst_paise" in po_keys else 0
+    po_has_approved_components = any(v > 0 for v in po_components.values())
+    po_has_trusted_gstin = bool(trusted_supp_gstin or trusted_recip_gstin)
+
+    # Determine if PO baseline requires GST verification
+    po_is_taxable = po_approved_gst_paise > 0 or po_has_approved_components
+
+    # Automatically treat zero-tax, zero-component standard PO as EXEMPT if not explicitly configured
+    if not po_is_taxable and gst_profile == "STANDARD_DOMESTIC":
+        gst_profile = GST_PROFILE_EXEMPT
+
+    # Legitimate exempt/non-GST transaction: PO approved GST is 0, invoice GST is 0, no components
+    is_legitimate_exempt = (
+        not po_is_taxable
+        and (gst_amount_paise is None or gst_amount_paise == 0)
+        and not any(v > 0 for v in inv_components.values())
+        and gst_profile in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST)
+    )
+
     gst_report = evaluate_gst_integrity(
         invoice_supplier_gstin=payload.supplier_gstin,
         trusted_supplier_gstin=trusted_supp_gstin,
@@ -225,16 +247,28 @@ def _evaluate(
         declared_total_gst_paise=gst_amount_paise,
     )
 
-    # Determine if GST fields should actively influence findings
-    has_gst_inputs = bool(
+    has_invoice_gst_inputs = bool(
         payload.supplier_gstin
         or payload.recipient_gstin
         or payload.place_of_supply_state_code
         or any(v > 0 for v in inv_components.values())
-        or gst_profile == "SPECIAL_CASE_REVIEW"
     )
 
-    if has_gst_inputs:
+    # GST validation must actively run if:
+    # 1. The PO baseline requires GST (taxable PO, approved GST components, or configured GSTINs)
+    # 2. OR the invoice declares GST inputs (components, GSTINs, POS)
+    # 3. OR the PO has a special profile (SPECIAL_CASE_REVIEW)
+    # UNLESS it is a legitimate exempt/non-GST transaction without any invoice GST inputs.
+    po_requires_gst = po_is_taxable or (
+        po_has_trusted_gstin and gst_profile not in (GST_PROFILE_EXEMPT, GST_PROFILE_NON_GST)
+    )
+    should_enforce_gst = (
+        po_requires_gst
+        or has_invoice_gst_inputs
+        or gst_profile == GST_PROFILE_SPECIAL_CASE_REVIEW
+    ) and not (is_legitimate_exempt and not has_invoice_gst_inputs)
+
+    if should_enforce_gst:
         for f in gst_report.findings:
             if f.status in (STATUS_MISMATCH, STATUS_MISSING, STATUS_MANUAL_REVIEW_REQUIRED):
                 findings.append({

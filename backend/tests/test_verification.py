@@ -23,6 +23,14 @@ def valid_invoice(**overrides):
         "gst_amount": "12966.10",
         "line_items": 5,
         "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+        "igst_amount": "0.00",
+        "utgst_amount": "0.00",
+        "cess_amount": "0.00",
     }
     return payload | overrides
 

@@ -325,6 +325,11 @@ def test_confirmed_extracted_fields_sent_to_verification_endpoint(client):
         "gst_amount": "12966.10",
         "line_items": 5,
         "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
     }
     response = client.post("/api/verify-invoice", json=verified_payload)
     assert response.status_code == 200

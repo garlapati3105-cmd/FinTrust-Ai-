@@ -35,8 +35,8 @@ class InvoiceVerificationRequest(BaseModel):
     )
     place_of_supply_state_code: str | None = Field(
         default=None,
-        max_length=10,
-        description="Place of supply state code (e.g. '27').",
+        max_length=128,
+        description="Place of supply state code or recognized state name (e.g. '27' or 'Maharashtra').",
     )
     cgst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
     sgst_amount: Decimal | None = Field(default=None, ge=0, max_digits=15, decimal_places=2)
