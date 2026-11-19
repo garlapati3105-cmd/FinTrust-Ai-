@@ -225,16 +225,18 @@ def _evaluate(
         declared_total_gst_paise=gst_amount_paise,
     )
 
-    # Determine if GST fields should actively influence findings
-    has_gst_inputs = bool(
-        payload.supplier_gstin
-        or payload.recipient_gstin
-        or payload.place_of_supply_state_code
-        or any(v > 0 for v in inv_components.values())
+    # GST requirements come from the trusted vendor/PO baseline, not from
+    # whichever optional GST fields the invoice submitter chooses to provide.
+    # Otherwise an invoice could bypass configured GST checks by omitting them.
+    gst_is_configured = bool(
+        trusted_supp_gstin
+        or trusted_recip_gstin
+        or po_pos
+        or any(v > 0 for v in po_components.values())
         or gst_profile == "SPECIAL_CASE_REVIEW"
     )
 
-    if has_gst_inputs:
+    if gst_is_configured:
         for f in gst_report.findings:
             if f.status in (STATUS_MISMATCH, STATUS_MISSING, STATUS_MANUAL_REVIEW_REQUIRED):
                 findings.append({
