@@ -5,7 +5,7 @@
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20(Integer%20Paise)-003B57?logo=sqlite)](https://sqlite.org/)
 [![PyMuPDF & RapidOCR](https://img.shields.io/badge/OCR-PyMuPDF%20%2B%20RapidOCR%20ONNX-orange)](#-document-extraction--ocr-pipeline)
 [![GST Engine](https://img.shields.io/badge/GST%20Engine-India%20GST%20(Luhn%20Mod%2036)-1f5d4a)](#-india-gst-integrity-engine)
-[![Tests Passing](https://img.shields.io/badge/Tests-105%2F105%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
+[![Tests Passing](https://img.shields.io/badge/Tests-108%2F108%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
 [![Evaluation Benchmark](https://img.shields.io/badge/Benchmark-31--Doc%20Synthetic%20Benchmark%20(100%25%20Accuracy)-blue)](#-evaluation-lab--31-document-synthetic-offline-benchmark)
 [![Live AI Validated](https://img.shields.io/badge/Live%20AI-3--Doc%20Smoke%20Test%20(21%2F21%20Fields)-brightgreen)](#-live-openrouter-ai-model-validation)
 [![Hackathon](https://img.shields.io/badge/Hackathon-Arthaton%202026%20(AI%20for%20Finance)-purple)](#)
@@ -80,7 +80,7 @@ While OCR and document matching tools exist in isolation, FinTrust AI bridges th
 | **Zero Client Authority** | The frontend submits only what the invoice claims; approved purchase order values and vendor bank references are queried directly from the server database. | Prevents client-side tampering of approved budgets or GST rates. |
 | **India GST Integrity Engine** | Validates 15-character GSTINs via Luhn mod 36, identifies State/UT codes, enforces Sections 7 & 8 of the IGST Act (CGST+SGST/UTGST vs IGST), and reconciles component breakdowns within ₹1.00 tolerance. | Prevents tax-type misclassification and invalid GST filings. |
 | **Bidirectional Grounding** | Verifies quote presence in document text, page containment, and value substantiation within the quote. | Prevents models from citing unrelated text to justify hallucinated figures. |
-| **Application-Level Append-Only Audit Trail** | The application backend exposes strictly append-only `INSERT` operations for audit events with no `UPDATE` or `DELETE` API endpoints or repository methods. | Maintains an immutable operational ledger for financial reviews. (See limitations regarding direct database-file access). |
+| **Application-Level Append-Only Audit Trail** | The application backend exposes strictly append-only `INSERT` operations for audit events with no `UPDATE` or `DELETE` API endpoints or repository methods. | Provides an application-level append-only audit trail for financial reviews. (See limitations regarding direct database-file access). |
 
 ---
 
@@ -262,13 +262,13 @@ python evaluation/scripts/run_evaluation.py
 
 ## 🔬 Automated Testing & Regression Suite
 
-The project includes **105 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
+The project includes **108 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
 
 ```powershell
 pytest backend/tests -q
 ........................................................................ [ 68%]
 .................................                                        [100%]
-105 passed in 32.58s
+108 passed in 7.00s (GitHub Actions, Python 3.12)
 ```
 
 - **`test_gst_integrity.py` (37 tests):** India GST Integrity Engine validation: 15-character GSTIN structure, official 38 State/UT catalogue, SGST vs UTGST distinction (Delhi/Puducherry/J&K vs Chandigarh/Ladakh/Dadra), Luhn mod 36 positive/negative checksum calculation, intra-state vs inter-state tax classification, component reconciliation (CGST, SGST, UTGST, IGST, Cess), ₹1.00 rounding tolerance, and full end-to-end API verification.
@@ -420,3 +420,43 @@ CREATE TABLE audit_events (
 
 Developed by **Garlapati** for **Arthaton 2026** (AI for Finance Hackathon).  
 GitHub Repository: **[https://github.com/garlapati3105-cmd/FinTrust-Ai-](https://github.com/garlapati3105-cmd/FinTrust-Ai-)**
+
+
+## 🔐 Deployment Configuration & Security
+
+The browser communicates with the backend through a same-origin Next.js API proxy at `/api/*`. The proxy forwards requests to the server-side `FINTRUST_BACKEND_URL` and injects `FINTRUST_API_KEY` when configured. The API key is never exposed through a `NEXT_PUBLIC_*` variable.
+
+### Local development
+
+- Start FastAPI on `http://127.0.0.1:8000`.
+- Start Next.js on `http://localhost:3000`.
+- The frontend proxy defaults to `http://127.0.0.1:8000`, so no browser-side localhost URLs are required.
+- API-key enforcement is optional in development. Leave `FINTRUST_API_KEY` empty to use the local API without a key.
+
+### Production deployment
+
+Configure these server-side environment variables:
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `FINTRUST_ENV` | Yes | Set to `production`; API routes fail closed if the API key is missing |
+| `FINTRUST_API_KEY` | Yes | Long random secret shared by the Next.js server and FastAPI |
+| `FINTRUST_BACKEND_URL` | Yes | Private/internal URL of the FastAPI service, set in the Next.js server environment |
+| `FINTRUST_CORS_ORIGINS` | If direct browser clients are used | Comma-separated allowed origins |
+| `OPENROUTER_API_KEY` | Optional | Enables external AI extraction; otherwise manual extraction workflow remains available |
+
+Generate a strong API key with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Set the same `FINTRUST_API_KEY` in both services. Set `FINTRUST_ENV=production` on FastAPI. Keep the backend private to the frontend service/network where possible. Do not commit real secrets or put the API key in `NEXT_PUBLIC_*` variables.
+
+The public `/health` and `/api/health` endpoints remain unauthenticated for platform health checks. All other `/api/*` application endpoints require the API key when configured. This is a shared-secret service boundary, not user identity, tenant isolation, or role-based access control. Before handling real customer financial records, add user authentication, per-user authorization, tenant isolation, TLS, secure secret rotation, rate limiting, and a documented retention policy.
+
+Uploaded invoice text is sent to OpenRouter when live AI extraction is enabled. Use synthetic or anonymized documents for demos unless the organization has approved the provider, data processing terms, retention, and disclosure requirements.
+
+### CI
+
+GitHub Actions runs the backend pytest suite and frontend production build on pushes to `main` and `fix/**`, and on pull requests targeting `main`. A successful build/test run is not a substitute for deployment smoke tests or a security review.
