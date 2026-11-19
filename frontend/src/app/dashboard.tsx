@@ -3866,8 +3866,7 @@ function InvoiceVerificationWorkspace({
                       )}
                     </div>
                     <div style={{ fontSize: "12px", fontWeight: 700 }}>
-                      POS: {placeOfSupply || verification?.place_of_supply_state_code || "—"}{" "}
-                      {verification?.gst_checks?.tax_classification_result?.pos_state_name && `(${verification.gst_checks.place_of_supply_result})`}
+                      POS: {placeOfSupply || verification?.place_of_supply_state_code || "—"}
                     </div>
                     <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--text)" }}>
                       {verification?.gst_checks?.tax_classification_result ? (
@@ -3975,7 +3974,9 @@ function InvoiceVerificationWorkspace({
                     </span>
                     <span>
                       {verification?.gst_checks?.component_reconciliation_result ? (
-                        verification.gst_checks.component_reconciliation_result.within_tolerance ? (
+                        verification.gst_checks.component_reconciliation_result.status === "NOT_EVALUATED" ? (
+                          <span style={{ color: "var(--muted)" }}>NOT EVALUATED</span>
+                        ) : verification.gst_checks.component_reconciliation_result.within_tolerance ? (
                           <span style={{ color: "var(--green)" }}>✓ TAX TOTAL MATCH (tol. ₹1.00)</span>
                         ) : (
                           <span style={{ color: "var(--red)" }}>
