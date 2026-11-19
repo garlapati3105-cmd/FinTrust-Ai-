@@ -54,7 +54,7 @@ type DashboardData = {
 
 type GSTCheckFinding = {
   finding_code: string;
-  severity: "INFO" | "WARNING" | "CRITICAL";
+  severity: "high" | "medium" | "low" | "info";
   status: "PASS" | "MISMATCH" | "MISSING" | "NOT_EVALUATED" | "MANUAL_REVIEW_REQUIRED";
   field_name: string;
   invoice_value: string | null;
@@ -64,29 +64,27 @@ type GSTCheckFinding = {
 };
 
 type GSTChecks = {
-  gst_validation_status: string;
-  tax_classification: {
+  overall_status: string;
+  tax_classification_result: {
     status: string;
-    expected: string;
-    observed: string;
-    supplier_state: string | null;
-    supplier_state_name: string | null;
-    place_of_supply: string | null;
-    pos_state_name: string | null;
-    is_union_territory: boolean;
+    profile: string;
+    tax_type: string;
+    expected_components: string[];
     explanation: string;
   };
-  components: {
-    cgst_paise: number;
-    sgst_paise: number;
-    utgst_paise: number;
-    igst_paise: number;
-    cess_paise: number;
-    declared_gst_paise: number;
-    sum_components_paise: number;
-    difference_paise: number;
+  component_reconciliation_result: {
+    status: string;
+    component_sum_paise: number;
+    declared_total_paise: number;
+    variance_paise: number;
     within_tolerance: boolean;
   };
+  supplier_gstin_result: Record<string, unknown>;
+  recipient_gstin_result: Record<string, unknown>;
+  place_of_supply_result: Record<string, unknown>;
+  requires_hold: boolean;
+  requires_manual_review: boolean;
+  disclaimer: string;
   findings: GSTCheckFinding[];
 };
 
@@ -472,7 +470,7 @@ function RecentAuditActivity({
     <section className="content-panel">
       <div className="panel-header">
         <h3>Recent audit activity</h3>
-        <span className="soft-tag neutral">Immutable ledger</span>
+        <span className="soft-tag neutral">Append-only audit trail</span>
       </div>
       {entries.length === 0 ? (
         <div style={{ padding: "32px 16px", textAlign: "center" }}>
@@ -1801,7 +1799,7 @@ function SettingsPage({
           </div>
           <div className="setting-row">
             <div className="setting-info">
-              <strong>Immutable Audit Log</strong>
+              <strong>Append-only Audit Log</strong>
               <span>Append-only SQLite event ledger with zero deletion API routes</span>
             </div>
             <span className="status-badge active-status">Append-Only</span>
@@ -2259,7 +2257,7 @@ function InvoiceVerificationWorkspace({
         invoiceNumber: "INV-TEST-1003",
         vendorName: "BluePeak Technologies",
         poNumber: "PO-1002",
-        invoiceTotal: "119967.08",
+        invoiceTotal: "120000.00",
         gstAmount: "18305.08",
         lineItems: "8",
         bankAccountRef: "DEMO-ACCT-1002",
@@ -2301,7 +2299,7 @@ function InvoiceVerificationWorkspace({
         invoiceNumber: "INV-TEST-1006",
         vendorName: "BluePeak Technologies",
         poNumber: "PO-1002",
-        invoiceTotal: "119967.08",
+        invoiceTotal: "120000.00",
         gstAmount: "18305.08",
         lineItems: "8",
         bankAccountRef: "DEMO-ACCT-1002",
@@ -3749,15 +3747,15 @@ function InvoiceVerificationWorkspace({
                     {verification?.gst_checks ? (
                       <span
                         className={`soft-tag ${
-                          verification.gst_checks.gst_validation_status === "VALID"
+                          verification.gst_checks.overall_status === "PASS"
                             ? "approve"
-                            : verification.gst_checks.gst_validation_status === "INVALID"
+                            : verification.gst_checks.overall_status === "MISMATCH"
                             ? "block"
                             : "warning"
                         }`}
                         style={{ fontWeight: 700, fontSize: "11px" }}
                       >
-                        STATUS: {verification.gst_checks.gst_validation_status}
+                        STATUS: {verification.gst_checks.overall_status}
                       </span>
                     ) : (
                       <span className="soft-tag neutral" style={{ fontSize: "11px" }}>
@@ -3846,22 +3844,22 @@ function InvoiceVerificationWorkspace({
                       <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
                         Tax Classification
                       </span>
-                      {verification?.gst_checks?.tax_classification ? (
+                      {verification?.gst_checks?.tax_classification_result ? (
                         <span
                           className="status-badge"
                           style={{
                             background:
-                              verification.gst_checks.tax_classification.status === "MATCH"
+                              verification.gst_checks.tax_classification_result.status === "PASS"
                                 ? "rgba(31, 93, 74, 0.15)"
                                 : "var(--amber-soft)",
                             color:
-                              verification.gst_checks.tax_classification.status === "MATCH"
+                              verification.gst_checks.tax_classification_result.status === "PASS"
                                 ? "var(--green)"
                                 : "var(--amber)",
                             fontSize: "10px",
                           }}
                         >
-                          {verification.gst_checks.tax_classification.status === "MATCH" ? "TAX TYPE MATCH" : "TAX TYPE MISMATCH"}
+                          {verification.gst_checks.tax_classification_result.status === "PASS" ? "TAX TYPE MATCH" : "TAX TYPE MISMATCH"}
                         </span>
                       ) : (
                         <span className="status-badge" style={{ fontSize: "10px" }}>PENDING</span>
@@ -3869,17 +3867,14 @@ function InvoiceVerificationWorkspace({
                     </div>
                     <div style={{ fontSize: "12px", fontWeight: 700 }}>
                       POS: {placeOfSupply || verification?.place_of_supply_state_code || "—"}{" "}
-                      {verification?.gst_checks?.tax_classification?.pos_state_name && `(${verification.gst_checks.tax_classification.pos_state_name})`}
+                      {verification?.gst_checks?.tax_classification_result?.pos_state_name && `(${verification.gst_checks.place_of_supply_result})`}
                     </div>
                     <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--text)" }}>
-                      {verification?.gst_checks?.tax_classification ? (
+                      {verification?.gst_checks?.tax_classification_result ? (
                         <>
-                          <span>Expected: <strong>{verification.gst_checks.tax_classification.expected}</strong></span>
-                          {verification.gst_checks.tax_classification.expected !== verification.gst_checks.tax_classification.observed && (
-                            <div style={{ color: "var(--red)", marginTop: "2px" }}>
-                              Observed: <strong>{verification.gst_checks.tax_classification.observed}</strong>
-                            </div>
-                          )}
+                          <div>Supply type: <strong>{verification.gst_checks.tax_classification_result.tax_type.replace(/_/g, " ")}</strong></div>
+                          <div>Expected components: <strong>{verification.gst_checks.tax_classification_result.expected_components.join(" + ") || "Manual review"}</strong></div>
+                          <div style={{ marginTop: "3px", color: "var(--muted)" }}>{verification.gst_checks.tax_classification_result.explanation}</div>
                         </>
                       ) : (
                         <span>Rule: Sec 7/8 IGST Act (Inter vs Intra-State)</span>
@@ -3971,20 +3966,20 @@ function InvoiceVerificationWorkspace({
                   <div className="table-row" style={{ background: "var(--surface-soft)", fontWeight: 700, padding: "10px 12px", borderTop: "2px solid var(--line)" }}>
                     <span>Total Tax Reconciliation</span>
                     <span>
-                      {verification?.gst_checks?.components
-                        ? `₹${(verification.gst_checks.components.sum_components_paise / 100).toFixed(2)}`
+                      {verification?.gst_checks?.component_reconciliation_result
+                        ? `₹${(verification.gst_checks.component_reconciliation_result.component_sum_paise / 100).toFixed(2)}`
                         : `₹${((parseFloat(cgstAmount) || 0) + (parseFloat(sgstAmount) || 0) + (parseFloat(utgstAmount) || 0) + (parseFloat(igstAmount) || 0) + (parseFloat(cessAmount) || 0)).toFixed(2)}`}
                     </span>
                     <span>
                       Declared: ₹{(parseFloat(gstAmount) || 0).toFixed(2)}
                     </span>
                     <span>
-                      {verification?.gst_checks?.components ? (
-                        verification.gst_checks.components.within_tolerance ? (
+                      {verification?.gst_checks?.component_reconciliation_result ? (
+                        verification.gst_checks.component_reconciliation_result.within_tolerance ? (
                           <span style={{ color: "var(--green)" }}>✓ TAX TOTAL MATCH (tol. ₹1.00)</span>
                         ) : (
                           <span style={{ color: "var(--red)" }}>
-                            ⚠ MISMATCH: Diff ₹{(Math.abs(verification.gst_checks.components.difference_paise) / 100).toFixed(2)}
+                            ⚠ MISMATCH: Diff ₹{(Math.abs(verification.gst_checks.component_reconciliation_result.variance_paise) / 100).toFixed(2)}
                           </span>
                         )
                       ) : (
@@ -4009,10 +4004,10 @@ function InvoiceVerificationWorkspace({
                       {verification.gst_checks.findings.map((f, idx) => (
                         <div key={`${f.finding_code}-${idx}`} style={{ padding: "8px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "11px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
-                            <strong style={{ color: f.severity === "CRITICAL" ? "var(--red)" : f.severity === "WARNING" ? "var(--amber)" : "var(--muted)" }}>
+                            <strong style={{ color: f.severity === "high" ? "var(--red)" : f.severity === "medium" ? "var(--amber)" : "var(--muted)" }}>
                               [{f.finding_code}] {f.field_name.toUpperCase()}
                             </strong>
-                            <span className={`status-badge ${f.severity === "CRITICAL" ? "hold-status" : f.severity === "WARNING" ? "pending-status" : ""}`} style={{ fontSize: "9px" }}>
+                            <span className={`status-badge ${f.severity === "high" ? "hold-status" : f.severity === "medium" ? "pending-status" : ""}`} style={{ fontSize: "9px" }}>
                               {f.severity}
                             </span>
                           </div>
