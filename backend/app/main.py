@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import hmac
+import os
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .ai_extractor import extract_invoice_fields
 from .database import initialize_database
@@ -44,18 +47,54 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="FinTrust AI API", version="0.1.0", lifespan=lifespan)
 
+allowed_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "FINTRUST_CORS_ORIGINS",
+        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001",
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+
+@app.middleware("http")
+async def protect_api_routes(request, call_next):
+    """Protect application data routes when an API key is configured.
+
+    Production mode fails closed if the key is missing. Health endpoints remain
+    public for platform health checks; all other /api routes require X-API-Key.
+    """
+    path = request.url.path
+    if request.method == "OPTIONS" or path == "/api/health" or not path.startswith("/api/"):
+        return await call_next(request)
+
+    configured_key = os.getenv("FINTRUST_API_KEY", "").strip()
+    environment = os.getenv("FINTRUST_ENV", "development").strip().lower()
+
+    if not configured_key:
+        if environment in {"production", "prod"}:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "API access is not configured for this deployment."},
+            )
+        return await call_next(request)
+
+    supplied_key = request.headers.get("X-API-Key", "")
+    if not hmac.compare_digest(supplied_key, configured_key):
+        return JSONResponse(
+            status_code=401,
+            content={"detail": "A valid API key is required."},
+        )
+
+    return await call_next(request)
 
 
 def build_dashboard_payload() -> dict[str, Any]:
