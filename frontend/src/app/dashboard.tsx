@@ -1078,9 +1078,9 @@ function VendorRecordsPage({
     try {
       setLoading(true);
       const [vData, pData, iData] = await Promise.all([
-        fetchBackendJson<VendorRead[]>("http://localhost:8000/api/vendors"),
-        fetchBackendJson<PurchaseOrderRead[]>("http://localhost:8000/api/purchase-orders"),
-        fetchBackendJson<InvoiceRead[]>("http://localhost:8000/api/invoices").catch(() => []),
+        fetchBackendJson<VendorRead[]>("/api/vendors"),
+        fetchBackendJson<PurchaseOrderRead[]>("/api/purchase-orders"),
+        fetchBackendJson<InvoiceRead[]>("/api/invoices").catch(() => []),
       ]);
       setVendors(vData);
       setPos(pData);
@@ -1314,7 +1314,7 @@ function AuditTrailPage({
   const loadEvents = async () => {
     try {
       setLoading(true);
-      const data = await fetchBackendJson<AuditEventRead[]>("http://localhost:8000/api/audit-events");
+      const data = await fetchBackendJson<AuditEventRead[]>("/api/audit-events");
       setAuditEvents(data);
     } catch (err) {
       console.error("Failed to load audit events", err);
@@ -1523,7 +1523,7 @@ function RiskMonitoringPage({
     async function loadInvoices() {
       try {
         setLoading(true);
-        const data = await fetchBackendJson<InvoiceRead[]>("http://localhost:8000/api/invoices");
+        const data = await fetchBackendJson<InvoiceRead[]>("/api/invoices");
         setInvoices(data);
       } catch (err) {
         console.error("Failed to load invoice history", err);
@@ -1882,7 +1882,7 @@ export default function Dashboard() {
     setConnectionError("");
 
     try {
-      const payload = await fetchBackendJson<{ application: string; status: string }>("http://localhost:8000/health");
+      const payload = await fetchBackendJson<{ application: string; status: string }>("/api/health");
 
       if (payload.application !== "FinTrust AI") {
         throw new Error("The health response did not identify FinTrust AI.");
@@ -1905,10 +1905,10 @@ export default function Dashboard() {
     const loadDashboard = async () => {
       try {
         const [dashboardPayload, invoicesPayload, posPayload, auditPayload] = await Promise.all([
-          fetchBackendJson<DashboardData>("http://localhost:8000/api/dashboard"),
-          fetchBackendJson<InvoiceRead[]>("http://localhost:8000/api/invoices").catch(() => []),
-          fetchBackendJson<PurchaseOrderRead[]>("http://localhost:8000/api/purchase-orders").catch(() => []),
-          fetchBackendJson<AuditEventRead[]>("http://localhost:8000/api/audit-events").catch(() => []),
+          fetchBackendJson<DashboardData>("/api/dashboard"),
+          fetchBackendJson<InvoiceRead[]>("/api/invoices").catch(() => []),
+          fetchBackendJson<PurchaseOrderRead[]>("/api/purchase-orders").catch(() => []),
+          fetchBackendJson<AuditEventRead[]>("/api/audit-events").catch(() => []),
         ]);
         setDashboardData(dashboardPayload);
         setAllInvoices(invoicesPayload);
@@ -2192,8 +2192,8 @@ function InvoiceVerificationWorkspace({
       try {
         setLoadingBaselines(true);
         const [posData, vendorsData] = await Promise.all([
-          fetchBackendJson<PurchaseOrderRead[]>("http://localhost:8000/api/purchase-orders"),
-          fetchBackendJson<VendorRead[]>("http://localhost:8000/api/vendors"),
+          fetchBackendJson<PurchaseOrderRead[]>("/api/purchase-orders"),
+          fetchBackendJson<VendorRead[]>("/api/vendors"),
         ]);
         setTrustedPOs(posData);
         setTrustedVendors(vendorsData);
@@ -2453,7 +2453,7 @@ function InvoiceVerificationWorkspace({
     formData.append("file", selectedFile);
 
     try {
-      const response = await fetch("http://localhost:8000/api/documents/extract", {
+      const response = await fetch("/api/documents/extract", {
         method: "POST",
         body: formData,
       });
@@ -2620,7 +2620,7 @@ function InvoiceVerificationWorkspace({
           if (!isNaN(v)) payloadToSend.cess_amount = v;
         }
 
-        const response = await fetch("http://localhost:8000/api/verify-invoice", {
+        const response = await fetch("/api/verify-invoice", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payloadToSend),
