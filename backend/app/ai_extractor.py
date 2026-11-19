@@ -99,25 +99,26 @@ def verify_value_grounded_in_quote(key: str, value: Any, evidence_quote: str | N
 
     if key in ("invoice_total", "gst_amount", "cgst_amount", "sgst_amount", "utgst_amount", "igst_amount", "cess_amount"):
         try:
-            d = Decimal(str(value))
-            rupees = int(d)
-            patterns = [
-                str(value),
-                f"{rupees}",
-                f"{rupees:,}",
-                f"{d:.2f}",
-                f"{d:,.2f}",
-            ]
-            for p in patterns:
-                norm_p = _normalize_search_text(p)
-                if norm_p and norm_p in norm_quote:
+            expected_amount = Decimal(str(value))
+            if not expected_amount.is_finite():
+                return False
+
+            # Compare complete numeric tokens. Substring checks incorrectly accept
+            # 85,000 as evidence for 185,000 because one amount contains the other.
+            amount_tokens = re.findall(
+                r"(?<![A-Za-z0-9])[+-]?\d+(?:,\d+)*(?:\.\d{1,2})?(?![A-Za-z0-9])",
+                evidence_quote,
+            )
+            for token in amount_tokens:
+                try:
+                    candidate_amount = Decimal(token.replace(",", ""))
+                except InvalidOperation:
+                    continue
+                if candidate_amount == expected_amount:
                     return True
-            digits_only_quote = re.sub(r"[^\d.]", "", norm_quote)
-            if str(value) in digits_only_quote or f"{rupees}" in digits_only_quote:
-                return True
             return False
-        except (InvalidOperation, ValueError):
-            return _normalize_search_text(str(value)) in norm_quote
+        except (InvalidOperation, ValueError, TypeError):
+            return False
 
     elif key in ("supplier_gstin", "recipient_gstin"):
         norm_val = re.sub(r"[^a-zA-Z0-9]", "", str(value)).lower()
@@ -294,8 +295,9 @@ def parse_and_validate_ai_response(
         evidence_verified = False
         if evidence_quote:
             quote_in_doc = verify_evidence_in_text(evidence_quote, full_text)
-            quote_on_page = True
-            if pages_text is not None and page_num is not None and len(pages_text) > 0:
+            # A field cannot be page-grounded without a positive page number.
+            quote_on_page = page_num is not None and page_num > 0
+            if pages_text is not None and len(pages_text) > 0:
                 if page_num in pages_text:
                     quote_on_page = verify_evidence_in_text(evidence_quote, pages_text[page_num])
                 else:
@@ -308,7 +310,11 @@ def parse_and_validate_ai_response(
                     warning_msg = "Supporting evidence quote could not be confirmed in document text."
                     field_warning = f"{field_warning}; {warning_msg}" if field_warning else warning_msg
                 elif not quote_on_page:
-                    warning_msg = f"Evidence quote was not found on reported page {page_num}."
+                    warning_msg = (
+                        "Missing or invalid supporting evidence page number."
+                        if page_num is None or page_num <= 0
+                        else f"Evidence quote was not found on reported page {page_num}."
+                    )
                     field_warning = f"{field_warning}; {warning_msg}" if field_warning else warning_msg
                 elif not value_in_quote:
                     warning_msg = "Extracted value is not supported by the provided evidence quote."

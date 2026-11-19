@@ -379,6 +379,28 @@ def run_evaluation() -> dict[str, Any]:
     database.initialize_database(test_db_path)
     seed_database(test_db_path)
 
+    # This benchmark evaluates the original seven invoice fields. Its synthetic
+    # ground-truth files do not contain GSTIN/place-of-supply/tax-component values,
+    # so clear the GST baseline in this isolated evaluation database rather than
+    # silently fabricating invoice GST evidence. GST rules have their own test suite.
+    with database.get_connection(test_db_path) as connection:
+        connection.execute(
+            "UPDATE vendors SET gstin = NULL, gstin_verification_status = 'NOT_VERIFIED'"
+        )
+        connection.execute(
+            """
+            UPDATE purchase_orders
+            SET recipient_gstin = NULL,
+                place_of_supply_state_code = NULL,
+                gst_transaction_profile = 'NOT_CONFIGURED',
+                approved_cgst_paise = 0,
+                approved_sgst_paise = 0,
+                approved_utgst_paise = 0,
+                approved_igst_paise = 0,
+                approved_cess_paise = 0
+            """
+        )
+
     decision_results = []
     correct_decisions = 0
     clean_count = 0

@@ -36,6 +36,26 @@ def eval_db(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", test_db)
     database.initialize_database(test_db)
     seed_database(test_db)
+
+    # These evaluation tests exercise the legacy seven-field verification flow.
+    # GST-required behaviour is covered by test_gst_integrity.py.
+    with database.get_connection(test_db) as connection:
+        connection.execute(
+            "UPDATE vendors SET gstin = NULL, gstin_verification_status = 'NOT_VERIFIED'"
+        )
+        connection.execute(
+            """
+            UPDATE purchase_orders
+            SET recipient_gstin = NULL,
+                place_of_supply_state_code = NULL,
+                gst_transaction_profile = 'NOT_CONFIGURED',
+                approved_cgst_paise = 0,
+                approved_sgst_paise = 0,
+                approved_utgst_paise = 0,
+                approved_igst_paise = 0,
+                approved_cess_paise = 0
+            """
+        )
     return test_db
 
 
@@ -302,3 +322,38 @@ def test_document_extraction_endpoint_never_approves_or_persists(client):
     # Must not have created an invoice record
     invoices = client.get("/api/invoices").json()
     assert len(invoices) == 0
+
+
+
+def test_numeric_evidence_requires_an_exact_amount_token():
+    assert verify_value_grounded_in_quote(
+        "invoice_total",
+        "85000.00",
+        "Invoice total: INR 185000.00",
+    ) is False
+    assert verify_value_grounded_in_quote(
+        "invoice_total",
+        "85000.00",
+        "Invoice total: INR 85,000.00",
+    ) is True
+
+
+def test_evidence_without_page_number_is_not_page_verified():
+    doc_text = "Invoice total: INR 85000.00"
+    payload = {
+        "invoice_total": {
+            "value": "85000.00",
+            "page_number": None,
+            "evidence_quote": "Invoice total: INR 85000.00",
+            "confidence": 0.95,
+        }
+    }
+
+    fields, _ = parse_and_validate_ai_response(
+        json.dumps(payload),
+        doc_text,
+        pages_text={1: doc_text},
+    )
+
+    assert fields["invoice_total"].evidence_verified is False
+    assert "page number" in fields["invoice_total"].warning.lower()
