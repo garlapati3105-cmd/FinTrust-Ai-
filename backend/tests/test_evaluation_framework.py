@@ -302,3 +302,38 @@ def test_document_extraction_endpoint_never_approves_or_persists(client):
     # Must not have created an invoice record
     invoices = client.get("/api/invoices").json()
     assert len(invoices) == 0
+
+
+
+def test_numeric_evidence_requires_an_exact_amount_token():
+    assert verify_value_grounded_in_quote(
+        "invoice_total",
+        "85000.00",
+        "Invoice total: INR 185000.00",
+    ) is False
+    assert verify_value_grounded_in_quote(
+        "invoice_total",
+        "85000.00",
+        "Invoice total: INR 85,000.00",
+    ) is True
+
+
+def test_evidence_without_page_number_is_not_page_verified():
+    doc_text = "Invoice total: INR 85000.00"
+    payload = {
+        "invoice_total": {
+            "value": "85000.00",
+            "page_number": None,
+            "evidence_quote": "Invoice total: INR 85000.00",
+            "confidence": 0.95,
+        }
+    }
+
+    fields, _ = parse_and_validate_ai_response(
+        json.dumps(payload),
+        doc_text,
+        pages_text={1: doc_text},
+    )
+
+    assert fields["invoice_total"].evidence_verified is False
+    assert "page number" in fields["invoice_total"].warning.lower()
