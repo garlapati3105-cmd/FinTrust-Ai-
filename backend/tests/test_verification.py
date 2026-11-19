@@ -326,3 +326,28 @@ def test_missing_required_gst_fields_requires_hold(client):
     assert "recipient_gstin_missing" in finding_codes
     assert "invoice_place_of_supply_missing" in finding_codes
     assert "tax_components_missing" in finding_codes
+
+
+
+def test_api_key_is_required_when_configured(client, monkeypatch):
+    monkeypatch.setenv("FINTRUST_API_KEY", "unit-test-secret")
+
+    denied = client.get("/api/vendors")
+    allowed = client.get(
+        "/api/vendors",
+        headers={"X-API-Key": "unit-test-secret"},
+    )
+
+    assert denied.status_code == 401
+    assert allowed.status_code == 200
+    assert client.get("/api/health").status_code == 200
+
+
+def test_production_api_fails_closed_without_api_key(client, monkeypatch):
+    monkeypatch.delenv("FINTRUST_API_KEY", raising=False)
+    monkeypatch.setenv("FINTRUST_ENV", "production")
+
+    denied = client.get("/api/vendors")
+
+    assert denied.status_code == 503
+    assert client.get("/api/health").status_code == 200
