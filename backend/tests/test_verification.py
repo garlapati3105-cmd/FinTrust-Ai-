@@ -23,6 +23,14 @@ def valid_invoice(**overrides):
         "gst_amount": "12966.10",
         "line_items": 5,
         "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+        "utgst_amount": "0.00",
+        "igst_amount": "0.00",
+        "cess_amount": "0.00",
     }
     return payload | overrides
 
@@ -295,3 +303,26 @@ def test_invalid_money_precision_is_rejected(client):
 
         assert response.status_code == 422
     assert client.get("/api/invoices").json() == []
+
+
+
+def test_missing_required_gst_fields_requires_hold(client):
+    payload = valid_invoice(
+        supplier_gstin=None,
+        recipient_gstin=None,
+        place_of_supply_state_code=None,
+        cgst_amount=None,
+        sgst_amount=None,
+        utgst_amount=None,
+        igst_amount=None,
+        cess_amount=None,
+    )
+
+    result = client.post("/api/verify-invoice", json=payload).json()
+    finding_codes = {finding["code"] for finding in result["findings"]}
+
+    assert result["decision"] == "HOLD"
+    assert "supplier_gstin_missing" in finding_codes
+    assert "recipient_gstin_missing" in finding_codes
+    assert "invoice_place_of_supply_missing" in finding_codes
+    assert "tax_components_missing" in finding_codes
