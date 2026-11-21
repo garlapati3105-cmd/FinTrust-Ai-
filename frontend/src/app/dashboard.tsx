@@ -3773,7 +3773,7 @@ function InvoiceVerificationWorkspace({
                       <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
                         Supplier GSTIN
                       </span>
-                      {verification?.gst_checks?.findings.find((f) => f.field_name === "supplier_gstin") ? (
+                      {verification?.gst_checks?.findings.find((f) => f.field_name === "supplier_gstin" && f.status !== "PASS") ? (
                         <span className="status-badge" style={{ background: "var(--red-soft)", color: "var(--red)", fontSize: "10px" }}>
                           MISMATCH / INVALID
                         </span>
@@ -3810,7 +3810,7 @@ function InvoiceVerificationWorkspace({
                       <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase" }}>
                         Recipient GSTIN (Buyer)
                       </span>
-                      {verification?.gst_checks?.findings.find((f) => f.field_name === "recipient_gstin") ? (
+                      {verification?.gst_checks?.findings.find((f) => f.field_name === "recipient_gstin" && f.status !== "PASS") ? (
                         <span className="status-badge" style={{ background: "var(--amber-soft)", color: "var(--amber)", fontSize: "10px" }}>
                           BUYER MISMATCH
                         </span>
@@ -3995,14 +3995,14 @@ function InvoiceVerificationWorkspace({
                 </div>
 
                 {/* GST Discrepancy Findings (if any) */}
-                {verification?.gst_checks?.findings && verification.gst_checks.findings.length > 0 && (
+                {verification?.gst_checks?.findings && verification.gst_checks.findings.filter((f) => f.status !== "PASS").length > 0 && (
                   <div style={{ marginBottom: "14px", border: "1px solid rgba(184, 117, 25, 0.3)", borderRadius: "10px", padding: "12px", background: "rgba(184, 117, 25, 0.05)" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
                       <Icon name="risk" />
-                      <strong style={{ fontSize: "12px", color: "var(--text)" }}>GST Integrity Findings ({verification.gst_checks.findings.length})</strong>
+                      <strong style={{ fontSize: "12px", color: "var(--text)" }}>GST Integrity Findings ({verification.gst_checks.findings.filter((f) => f.status !== "PASS").length})</strong>
                     </div>
                     <div style={{ display: "grid", gap: "8px" }}>
-                      {verification.gst_checks.findings.map((f, idx) => (
+                      {verification.gst_checks.findings.filter((f) => f.status !== "PASS").map((f, idx) => (
                         <div key={`${f.finding_code}-${idx}`} style={{ padding: "8px 10px", background: "var(--surface)", borderRadius: "8px", border: "1px solid var(--line)", fontSize: "11px" }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "3px" }}>
                             <strong style={{ color: f.severity === "high" ? "var(--red)" : f.severity === "medium" ? "var(--amber)" : "var(--muted)" }}>

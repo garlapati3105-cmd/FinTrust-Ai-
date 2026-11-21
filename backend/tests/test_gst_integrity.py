@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import database
+from app.ai_extractor import verify_value_grounded_in_quote
 from app.gst_integrity import (
     GST_PROFILE_STANDARD_DOMESTIC,
     GST_PROFILE_SPECIAL_CASE_REVIEW,
@@ -19,6 +20,7 @@ from app.gst_integrity import (
     evaluate_gst_integrity,
     normalize_gstin,
     reconcile_gst_totals,
+    resolve_state_code,
     validate_gstin,
 )
 from app.main import app
@@ -665,4 +667,329 @@ def test_api_verify_invoice_component_sum_mismatch_hold(client):
     data = response.json()
     assert data["decision"] == "HOLD"
     assert any("sum" in f["code"].lower() for f in data["findings"])
+
+
+# ==============================================================================
+# 10. AUDIT HARDENING REGRESSION TESTS
+# ==============================================================================
+
+def test_regression_gst_configured_po_with_missing_invoice_gst_fields_held(client):
+    """
+    Scenario 1: Taxable PO (PO-1001 with ₹12,966.10 approved GST) must NOT silently bypass
+    GST validation when invoice omits all GST fields. It must trigger HOLD with findings.
+    """
+    payload = {
+        "invoice_number": "INV-REGRESS-001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        # All GST fields intentionally omitted
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "HOLD"
+    assert data["risk_level"] == "high"
+    finding_codes = [f["code"] for f in data["findings"]]
+    assert "supplier_gstin_missing" in finding_codes
+
+
+def test_regression_taxable_po_missing_supplier_gstin_held(client):
+    """
+    Scenario 2: Missing supplier GSTIN on taxable PO must trigger HOLD.
+    """
+    payload = {
+        "invoice_number": "INV-REGRESS-002",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": None,
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "HOLD"
+    assert any(f["code"] == "supplier_gstin_missing" for f in data["findings"])
+
+
+def test_regression_legitimate_exempt_transaction_approved(client):
+    """
+    Scenario 3: Legitimate exempt/non-GST transaction (0 GST PO + 0 GST invoice)
+    must APPROVE without false rejection.
+    """
+    with database.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO purchase_orders (
+                po_number, vendor_id, approved_total_paise, approved_gst_paise,
+                approved_line_items, issue_date, status, recipient_gstin,
+                place_of_supply_state_code, gst_transaction_profile,
+                approved_cgst_paise, approved_sgst_paise, approved_utgst_paise,
+                approved_igst_paise, approved_cess_paise, created_at
+            ) VALUES (
+                'PO-EXEMPT-001', 1, 5000000, 0,
+                3, '2026-11-10', 'approved', '27AABCF1234F1Z4',
+                '27', 'EXEMPT',
+                0, 0, 0, 0, 0, '2026-11-10T10:00:00'
+            )
+            """
+        )
+
+    payload = {
+        "invoice_number": "INV-EXEMPT-001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-EXEMPT-001",
+        "invoice_total": "50000.00",
+        "gst_amount": "0.00",
+        "line_items": 3,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "APPROVE"
+    assert data["risk_level"] == "low"
+    assert len(data["findings"]) == 0
+
+
+def test_regression_pos_state_name_resolution(client):
+    """
+    Scenario 4: Maharashtra as POS name (and MH abbreviation) resolves to state code 27.
+    """
+    # Direct function checks
+    assert resolve_state_code("Maharashtra") == "27"
+    assert resolve_state_code("maharashtra") == "27"
+    assert resolve_state_code("MH") == "27"
+    assert resolve_state_code("mh") == "27"
+    assert resolve_state_code("Delhi") == "07"
+    assert resolve_state_code("Chandigarh") == "04"
+    assert resolve_state_code("Karnataka") == "29"
+
+    # API endpoint check
+    payload = {
+        "invoice_number": "INV-POS-NAME-001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "Maharashtra",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "APPROVE"
+    assert data["gst_checks"]["place_of_supply_result"]["status"] == "PASS"
+    assert data["gst_checks"]["place_of_supply_result"]["invoice_pos"] == "27"
+
+
+def test_regression_unknown_place_of_supply_held(client):
+    """
+    Scenario 5: Unknown/ambiguous Place of Supply location must never be guessed
+    and must trigger HOLD with invalid_state_code / place_of_supply_mismatch.
+    """
+    assert resolve_state_code("Atlantis") is None
+    assert resolve_state_code("UnknownCity") is None
+
+    payload = {
+        "invoice_number": "INV-POS-UNKNOWN-001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "Atlantis",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data["decision"] == "HOLD"
+    finding_codes = [f["code"] for f in data["findings"]]
+    assert "invalid_state_code" in finding_codes or "place_of_supply_mismatch" in finding_codes
+
+
+def test_regression_evidence_grounding_rejects_empty_and_punctuation():
+    """
+    Scenario 6: Empty strings, whitespace-only, and punctuation-only values
+    must be strictly rejected by server-side evidence grounding.
+    """
+    quote = "Supplier GSTIN: 27AAPCA1234A1Z5, Total: ₹85,000.00, PO-1001"
+
+    # GSTIN empty / punctuation
+    assert verify_value_grounded_in_quote("supplier_gstin", "", quote) is False
+    assert verify_value_grounded_in_quote("supplier_gstin", "   ", quote) is False
+    assert verify_value_grounded_in_quote("supplier_gstin", "--", quote) is False
+    assert verify_value_grounded_in_quote("supplier_gstin", "***", quote) is False
+
+    # Monetary empty / punctuation
+    assert verify_value_grounded_in_quote("invoice_total", "", quote) is False
+    assert verify_value_grounded_in_quote("invoice_total", "   ", quote) is False
+    assert verify_value_grounded_in_quote("invoice_total", "$", quote) is False
+    assert verify_value_grounded_in_quote("invoice_total", "₹", quote) is False
+
+    # String identifiers empty / punctuation
+    assert verify_value_grounded_in_quote("invoice_number", "", quote) is False
+    assert verify_value_grounded_in_quote("invoice_number", "   ", quote) is False
+    assert verify_value_grounded_in_quote("invoice_number", "---", quote) is False
+    assert verify_value_grounded_in_quote("vendor_name", "   ", quote) is False
+    assert verify_value_grounded_in_quote("line_items", "   ", quote) is False
+    assert verify_value_grounded_in_quote("line_items", "none", quote) is False
+    assert verify_value_grounded_in_quote("place_of_supply_state_code", "   ", quote) is False
+
+    # Legitimate values must still ground correctly
+    assert verify_value_grounded_in_quote("supplier_gstin", "27AAPCA1234A1Z5", quote) is True
+    assert verify_value_grounded_in_quote("invoice_total", "85000.00", quote) is True
+    assert verify_value_grounded_in_quote("po_number", "PO-1001", quote) is True
+
+
+def test_regression_rounding_tolerance_boundaries():
+    """
+    Scenario 7: Component sum vs total GST rounding tolerance boundaries:
+    - 0 paise difference: PASS
+    - <= 100 paise difference: PASS (internal business tolerance)
+    - >= 101 paise difference: MISMATCH (HOLD)
+    """
+    base_components = {"cgst": 50000, "sgst": 50000}  # sum = 100,000 paise (₹1,000.00)
+
+    # 0 difference -> PASS, within_tolerance True
+    res0, f0 = reconcile_gst_totals(100000, base_components)
+    assert res0["within_tolerance"] is True
+    assert res0["status"] == STATUS_PASS
+    assert f0 is None
+
+    # +100 paise (₹1.00) -> PASS, within_tolerance True
+    res_pos100, f_pos100 = reconcile_gst_totals(99900, base_components)
+    assert res_pos100["within_tolerance"] is True
+    assert res_pos100["status"] == STATUS_PASS
+    assert f_pos100 is not None
+    assert f_pos100.finding_code == "gst_total_rounding_tolerance"
+
+    # -100 paise (-₹1.00) -> PASS, within_tolerance True
+    res_neg100, f_neg100 = reconcile_gst_totals(100100, base_components)
+    assert res_neg100["within_tolerance"] is True
+    assert res_neg100["status"] == STATUS_PASS
+    assert f_neg100 is not None
+    assert f_neg100.finding_code == "gst_total_rounding_tolerance"
+
+    # +101 paise (₹1.01) -> MISMATCH, within_tolerance False
+    res_pos101, f_pos101 = reconcile_gst_totals(99899, base_components)
+    assert res_pos101["within_tolerance"] is False
+    assert res_pos101["status"] == STATUS_MISMATCH
+    assert f_pos101 is not None
+    assert f_pos101.finding_code == "gst_component_sum_mismatch"
+
+    # -101 paise (-₹1.01) -> MISMATCH, within_tolerance False
+    res_neg101, f_neg101 = reconcile_gst_totals(100101, base_components)
+    assert res_neg101["within_tolerance"] is False
+    assert res_neg101["status"] == STATUS_MISMATCH
+    assert f_neg101 is not None
+    assert f_neg101.finding_code == "gst_component_sum_mismatch"
+
+
+def test_clean_intra_state_po_1001_approval_and_gst_checks_payload(client):
+    """
+    P0 Clean Demo Validation:
+    Verify that preset 'Intra-State Clean (PO-1001)' receives APPROVE and returns
+    full enriched gst_checks payload consumable by the frontend UI cards.
+    """
+    payload = {
+        "invoice_number": "INV-TEST-1001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+        "cess_amount": "0.00",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["decision"] == "APPROVE"
+    assert data["risk_level"] == "low"
+    assert len(data["findings"]) == 0
+
+    gst_checks = data.get("gst_checks")
+    assert gst_checks is not None
+    assert gst_checks["gst_validation_status"] == "VALID"
+
+    tax_class = gst_checks["tax_classification"]
+    assert tax_class["status"] == "MATCH"
+    assert tax_class["expected"] == "CGST + SGST"
+    assert tax_class["observed"] == "CGST + SGST"
+    assert tax_class["supplier_state"] == "27"
+    assert tax_class["place_of_supply"] == "27"
+
+    comps = gst_checks["components"]
+    assert comps["within_tolerance"] is True
+    assert comps["difference_paise"] == 0
+    assert comps["sum_components_paise"] == 1296610
+    assert comps["declared_gst_paise"] == 1296610
+    assert comps["cgst_paise"] == 648305
+    assert comps["sgst_paise"] == 648305
+
+
+def test_inter_state_tax_type_mismatch_po_1002_hold_and_gst_checks_payload(client):
+    """
+    P0 Mismatch Demo Validation:
+    Verify that preset 'Tax Type Mismatch (Inter-State)' receives HOLD and returns
+    enriched gst_checks indicating INVALID and tax_classification MISMATCH.
+    """
+    payload = {
+        "invoice_number": "INV-TEST-1006",
+        "vendor_name": "BluePeak Technologies",
+        "po_number": "PO-1002",
+        "invoice_total": "120000.00",
+        "gst_amount": "18305.08",
+        "line_items": 8,
+        "invoice_bank_account_ref": "DEMO-ACCT-1002",
+        "supplier_gstin": "29ABCDE1234F1ZW",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "9152.54",
+        "sgst_amount": "9152.54",
+        "cess_amount": "0.00",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["decision"] == "HOLD"
+    assert data["risk_level"] == "high"
+
+    gst_checks = data.get("gst_checks")
+    assert gst_checks is not None
+    assert gst_checks["gst_validation_status"] == "INVALID"
+    assert any("prohibited" in f["finding_code"] or f["field_name"] == "tax_type" for f in gst_checks["findings"])
+
+    tax_class = gst_checks["tax_classification"]
+    assert tax_class["status"] == "MISMATCH"
+    assert tax_class["expected"] == "IGST"
+    assert tax_class["observed"] == "CGST + SGST"
 

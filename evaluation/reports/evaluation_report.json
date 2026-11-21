@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-16T06:28:54Z",
+  "timestamp": "2026-11-21T10:11:51Z",
   "dataset_summary": {
     "total_documents": 31,
     "formats": {
@@ -20,15 +20,21 @@
   },
   "performance_and_ocr": {
     "total_extracted": 31,
-    "average_time_seconds": 1.1132,
-    "median_time_seconds": 0.0216,
-    "min_time_seconds": 0.0101,
-    "max_time_seconds": 17.5563,
+    "average_time_seconds": 0.4321,
+    "median_time_seconds": 0.0111,
+    "min_time_seconds": 0.0041,
+    "max_time_seconds": 6.7244,
     "ocr_documents_tested": 2,
     "ocr_success_count": 2,
     "ocr_success_rate_percent": 100.0
   },
   "field_extraction_accuracy": {
+    "evaluation_mode": "DETERMINISTIC_FIXTURE_REGRESSION",
+    "methodological_disclosure": "Offline evaluation uses deterministic ground-truth fixtures to validate schema parsing, normalization constraints, and evidence-grounding logic. It does not measure live LLM model accuracy.",
+    "total_supported_fields": 15,
+    "total_evaluated": 217,
+    "total_correct": 217,
+    "overall_accuracy_percent": 100.0,
     "per_field": {
       "invoice_number": 100.0,
       "vendor_name": 100.0,
@@ -36,9 +42,93 @@
       "invoice_total": 100.0,
       "gst_amount": 100.0,
       "line_items": 100.0,
-      "invoice_bank_account_ref": 100.0
+      "invoice_bank_account_ref": 100.0,
+      "supplier_gstin": null,
+      "recipient_gstin": null,
+      "place_of_supply_state_code": null,
+      "cgst_amount": null,
+      "sgst_amount": null,
+      "utgst_amount": null,
+      "igst_amount": null,
+      "cess_amount": null
     },
-    "overall_accuracy_percent": 100.0
+    "field_counts": {
+      "invoice_number": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "vendor_name": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "po_number": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "invoice_total": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "gst_amount": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "line_items": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "invoice_bank_account_ref": {
+        "total": 31,
+        "correct": 31,
+        "not_evaluated": 0
+      },
+      "supplier_gstin": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "recipient_gstin": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "place_of_supply_state_code": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "cgst_amount": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "sgst_amount": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "utgst_amount": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "igst_amount": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      },
+      "cess_amount": {
+        "total": 0,
+        "correct": 0,
+        "not_evaluated": 31
+      }
+    }
   },
   "evidence_grounding_validation": {
     "adversarial_cases_tested": 5,

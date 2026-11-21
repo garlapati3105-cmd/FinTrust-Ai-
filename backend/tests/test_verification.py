@@ -28,8 +28,8 @@ def valid_invoice(**overrides):
         "place_of_supply_state_code": "27",
         "cgst_amount": "6483.05",
         "sgst_amount": "6483.05",
-        "utgst_amount": "0.00",
         "igst_amount": "0.00",
+        "utgst_amount": "0.00",
         "cess_amount": "0.00",
     }
     return payload | overrides

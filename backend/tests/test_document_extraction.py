@@ -330,9 +330,6 @@ def test_confirmed_extracted_fields_sent_to_verification_endpoint(client):
         "place_of_supply_state_code": "27",
         "cgst_amount": "6483.05",
         "sgst_amount": "6483.05",
-        "utgst_amount": "0.00",
-        "igst_amount": "0.00",
-        "cess_amount": "0.00",
     }
     response = client.post("/api/verify-invoice", json=verified_payload)
     assert response.status_code == 200

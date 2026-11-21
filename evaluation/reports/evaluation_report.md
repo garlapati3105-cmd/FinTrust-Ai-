@@ -1,6 +1,6 @@
 # FinTrust AI — Real-World Reliability & Evaluation Report
 
-**Generated:** 2026-11-16T06:28:54Z  
+**Generated:** 2026-11-21T10:11:51Z  
 **Evaluation Mode:** Complete Document-to-Verification Workflow  
 
 ---
@@ -11,7 +11,8 @@
 |---|---|---|---|
 | **Synthetic Dataset** | 30+ Documents | **31 Documents** (PDF & PNG) | **PASSED** |
 | **OCR Text Extraction** | 100% on scanned/image docs | **100.0%** (2/2 documents) | **PASSED** |
-| **Field Extraction Accuracy** | High precision across 7 fields | **100.0%** overall | **PASSED** |
+| **Fixture Regression Accuracy** | High precision across base schema | **100.0%** (217/217 evaluated fields) | **PASSED** |
+| **GST Field Coverage** | 8 statutory GST fields | **Not Evaluated** (No GST GT in legacy dataset) | **DISCLOSED** |
 | **Evidence Grounding** | Reject ungrounded / mismatched quotes | **100.0%** (5/5 adversarial cases) | **PASSED** |
 | **Malicious Injection Detection** | Flag directive injection phrases | **100.0%** (4/4 attacks flagged) | **PASSED** |
 | **Heuristic False Positive Rate** | Document regex boundary limitations | **100.0%** on benign lookalike | **OBSERVED** |
@@ -39,14 +40,18 @@ The evaluation dataset was generated with fictional entities, synthetic identifi
 ## 3. Extraction & OCR Performance
 
 - **Total Documents Processed**: 31
-- **Average Extraction Latency**: 1.1132s
-- **Median Extraction Latency**: 0.0216s
-- **Min / Max Latency**: 0.0101s / 17.5563s
+- **Average Extraction Latency**: 0.4321s
+- **Median Extraction Latency**: 0.0111s
+- **Min / Max Latency**: 0.0041s / 6.7244s
 - **OCR Success Rate**: 100.0% (2/2 scanned/image docs)
 
 ---
 
-## 4. Field-Level Extraction Accuracy
+## 4. Field-Level Extraction Accuracy (15 Schema Fields)
+
+> [!NOTE]
+> **Methodological Disclosure — Deterministic Fixture-Based Regression vs Live Model Evaluation:**
+> This offline test evaluates structured JSON schema parsing, normalization, evidence grounding, and deterministic verification rules against ground-truth fixtures and synthetic PDFs. It is a deterministic regression suite, NOT an empirical measurement of external LLM extraction accuracy. Live AI extraction accuracy across real OpenRouter inferences is measured separately in the Live OpenRouter Model Validation Smoke Test.
 
 All fields were evaluated with strict normalization (case-insensitivity for vendors, exact integer paise for monetary amounts, normalized uppercase for invoice identifiers).
 
@@ -59,7 +64,15 @@ All fields were evaluated with strict normalization (case-insensitivity for vend
 | `gst_amount` | 31 | 31 | **100.0%** |
 | `line_items` | 31 | 31 | **100.0%** |
 | `invoice_bank_account_ref` | 31 | 31 | **100.0%** |
-| **Overall Extraction Accuracy** | **217** | **217** | **100.0%** |
+| `supplier_gstin` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `recipient_gstin` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `place_of_supply_state_code` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `cgst_amount` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `sgst_amount` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `utgst_amount` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `igst_amount` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| `cess_amount` | 0 | 0 | *NOT_EVALUATED* (No GT in legacy dataset) |
+| **Overall Evaluated Accuracy** | **217** | **217** | **100.0%** |
 
 ---
 

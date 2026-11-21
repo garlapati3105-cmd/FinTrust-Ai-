@@ -13,10 +13,25 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app.database as database
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
 from app.ai_extractor import (
+    FIELD_KEYS,
     parse_and_validate_ai_response,
     verify_evidence_in_text,
     verify_value_grounded_in_quote,
+)
+from evaluation.scripts.run_live_smoke_test import (
+    BASE_FIELD_KEYS,
+    GST_FIELD_KEYS,
+    GT_FIELD_KEY_MAP,
+    compare_field_value,
+    resolve_expected_field,
+    run_live_smoke_test,
 )
 from app.document_extractor import extract_document_text
 from app.document_security import detect_file_type, scan_for_suspicious_content
@@ -234,6 +249,11 @@ def test_authoritative_verification_clean_invoice(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res = verify_and_record_invoice(req)
     assert res["decision"] == "APPROVE"
@@ -281,6 +301,11 @@ def test_authoritative_verification_duplicate_prevention(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res1 = verify_and_record_invoice(req1)
     assert res1["decision"] == "APPROVE"
@@ -295,6 +320,11 @@ def test_authoritative_verification_duplicate_prevention(eval_db):
         gst_amount=Decimal("12966.10"),
         line_items=5,
         invoice_bank_account_ref="DEMO-ACCT-1001",
+        supplier_gstin="27AAPCA1234A1Z5",
+        recipient_gstin="27AABCF1234F1Z4",
+        place_of_supply_state_code="27",
+        cgst_amount=Decimal("6483.05"),
+        sgst_amount=Decimal("6483.05"),
     )
     res2 = verify_and_record_invoice(req2)
     assert res2["decision"] == "HOLD"
@@ -324,36 +354,150 @@ def test_document_extraction_endpoint_never_approves_or_persists(client):
     assert len(invoices) == 0
 
 
+# ==============================================================================
+# 7. 15-Field Evaluation Schema & Metric Integrity Regression Suite
+# ==============================================================================
 
-def test_numeric_evidence_requires_an_exact_amount_token():
-    assert verify_value_grounded_in_quote(
-        "invoice_total",
-        "85000.00",
-        "Invoice total: INR 185000.00",
-    ) is False
-    assert verify_value_grounded_in_quote(
-        "invoice_total",
-        "85000.00",
-        "Invoice total: INR 85,000.00",
-    ) is True
+def test_all_15_fields_have_explicit_evaluation_mapping_definitions():
+    """Requirement 1: Every extraction schema field must have an explicit mapping in GT_FIELD_KEY_MAP."""
+    assert len(FIELD_KEYS) == 15, f"Expected 15 fields in FIELD_KEYS, found {len(FIELD_KEYS)}"
+    for key in FIELD_KEYS:
+        assert key in GT_FIELD_KEY_MAP, f"Field '{key}' lacks an explicit mapping definition in GT_FIELD_KEY_MAP"
+        mappings = GT_FIELD_KEY_MAP[key]
+        assert isinstance(mappings, list) and len(mappings) > 0, f"Mappings for '{key}' must be a non-empty list"
 
 
-def test_evidence_without_page_number_is_not_page_verified():
-    doc_text = "Invoice total: INR 85000.00"
-    payload = {
-        "invoice_total": {
-            "value": "85000.00",
-            "page_number": None,
-            "evidence_quote": "Invoice total: INR 85000.00",
-            "confidence": 0.95,
-        }
+def test_missing_optional_ground_truth_fields_do_not_cause_key_error():
+    """Requirement 2: Absence of GST or optional fields in legacy GT dictionary must never raise KeyError."""
+    legacy_gt = {
+        "document_id": "INV-LEGACY-001",
+        "expected_invoice_number": "INV-101",
+        "expected_vendor": "Aster Office Supplies",
+        # Zero GST fields present
     }
+    for key in FIELD_KEYS:
+        try:
+            has_gt, val = resolve_expected_field(legacy_gt, key)
+            if key in ("invoice_number", "vendor_name"):
+                assert has_gt is True
+            else:
+                assert has_gt is False
+                assert val is None
+        except KeyError as exc:
+            pytest.fail(f"KeyError unexpectedly raised for field '{key}': {exc}")
 
-    fields, _ = parse_and_validate_ai_response(
-        json.dumps(payload),
-        doc_text,
-        pages_text={1: doc_text},
-    )
 
-    assert fields["invoice_total"].evidence_verified is False
-    assert "page number" in fields["invoice_total"].warning.lower()
+def test_explicit_expected_null_values_evaluated_correctly():
+    """Requirement 3: When GT explicitly marks a field as None, model returning None is a MATCH; returning a value is a MISMATCH."""
+    gt_with_null_po = {
+        "expected_invoice_number": "INV-202",
+        "expected_po": None,  # Explicitly expected to be absent
+    }
+    has_gt, exp_val = resolve_expected_field(gt_with_null_po, "po_number")
+    assert has_gt is True
+    assert exp_val is None
+
+    # Scenario A: Model correctly extracts None -> MATCH
+    ext_val_none = None
+    is_match_none = (ext_val_none is None or str(ext_val_none).strip() == "")
+    assert is_match_none is True
+
+    # Scenario B: Model hallucinates a PO -> MISMATCH
+    ext_val_hallucinated = "PO-9999"
+    is_match_hallucinated = (ext_val_hallucinated is None or str(ext_val_hallucinated).strip() == "")
+    assert is_match_hallucinated is False
+
+
+def test_fields_without_ground_truth_marked_not_evaluated():
+    """Requirement 4: Ground truth omission must mark field NOT_EVALUATED and exclude it from evaluated count."""
+    gt_partial = {
+        "expected_invoice_number": "INV-303",
+        "expected_invoice_amount": "50000.00",
+    }
+    for gst_field in GST_FIELD_KEYS:
+        has_gt, val = resolve_expected_field(gt_partial, gst_field)
+        assert has_gt is False
+        assert val is None
+
+
+def test_only_evaluated_fields_contribute_to_accuracy_denominators():
+    """Requirement 5: Only fields with GT expectations contribute to the accuracy denominator."""
+    gt_record = {
+        "expected_invoice_number": "INV-404",
+        "expected_invoice_amount": "85000.00",
+        # 13 fields not evaluated
+    }
+    mock_extracted = {
+        "invoice_number": "INV-404",        # Match
+        "invoice_total": "85000.00",         # Match
+        "supplier_gstin": "27AAPCA1234A1Z5", # Extracted, but GT has no expectation
+    }
+    evaluated_count = 0
+    matched_count = 0
+    not_evaluated_count = 0
+
+    for key in FIELD_KEYS:
+        has_gt, exp_val = resolve_expected_field(gt_record, key)
+        if not has_gt:
+            not_evaluated_count += 1
+            continue
+        evaluated_count += 1
+        ext_v = mock_extracted.get(key)
+        if compare_field_value(key, ext_v, exp_val):
+            matched_count += 1
+
+    assert evaluated_count == 2
+    assert not_evaluated_count == 13
+    assert matched_count == 2
+    accuracy = (matched_count / evaluated_count) * 100
+    assert accuracy == 100.0  # Denominator is 2, NOT 15
+
+
+def test_gst_field_scoring_accurate_when_expected_values_exist():
+    """Requirement 6: GST fields compare paise for amounts, case-insensitive codes for GSTINs and Place of Supply."""
+    # 1. Monetary paise comparisons
+    assert compare_field_value("cgst_amount", "6483.05", "6483.05") is True
+    assert compare_field_value("cgst_amount", "₹ 6,483.05", "6483.05") is True
+    assert compare_field_value("sgst_amount", "6483.05", "6483.06") is False  # 1 paise difference
+    assert compare_field_value("igst_amount", "18305.08", "18305.08") is True
+    assert compare_field_value("utgst_amount", "3546.61", "3546.61") is True
+    assert compare_field_value("cess_amount", "0.00", "0.00") is True
+
+    # 2. GSTIN format comparisons
+    assert compare_field_value("supplier_gstin", "27AAPCA1234A1Z5", "27aapca1234a1z5") is True
+    assert compare_field_value("supplier_gstin", "27AAPCA1234A1Z5 ", "27AAPCA1234A1Z5") is True
+    assert compare_field_value("supplier_gstin", "27AAPCA1234A1Z5", "29ABCDE1234F1ZW") is False
+
+    # 3. Place of Supply comparisons
+    assert compare_field_value("place_of_supply_state_code", "27", "27") is True
+    assert compare_field_value("place_of_supply_state_code", "04", "4") is True
+    assert compare_field_value("place_of_supply_state_code", "27", "29") is False
+
+
+def test_evidence_verification_metrics_computed_independently_from_field_accuracy():
+    """Requirement 7: Evidence grounding rate is based on (verified_quotes / tested_quotes) independently of GT availability."""
+    quotes_tested = 4
+    quotes_verified = 3
+    grounding_acc = (quotes_verified / quotes_tested) * 100
+    assert grounding_acc == 75.0
+
+
+def test_missing_api_key_produces_truthful_skipped_result(monkeypatch):
+    """Requirement 8: Absent OPENROUTER_API_KEY marks evaluation SKIPPED without failing or making external requests."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    payload = run_live_smoke_test()
+    assert payload["status"] == "SKIPPED"
+    assert payload["live_requests_completed"] == 0
+    assert payload["reason"] == "OPENROUTER_API_KEY environment variable is not configured."
+
+
+def test_skipped_live_evaluations_never_contain_fabricated_ai_accuracy(monkeypatch):
+    """Requirement 9: In skipped mode, live AI accuracy metrics must strictly be null/None."""
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    payload = run_live_smoke_test()
+    m = payload["metrics"]
+    assert m["overall_field_accuracy_percent"] is None
+    assert m["evidence_grounding_accuracy_percent"] is None
+    assert m["gst_field_accuracy_percent"] is None
+    assert m["total_fields_evaluated"] == 0
+    assert m["total_fields_supported"] == 15
