@@ -14,6 +14,46 @@
 
 ---
 
+## 📸 Application Preview
+
+Explore the live user interface of FinTrust AI running with real-time database reconciliation and the India GST Integrity Engine:
+
+### 1. Overview Dashboard
+![FinTrust AI Overview Dashboard](docs/screenshots/dashboard.png)
+*Real-time MSME financial workspace featuring database-backed KPI counters (Registered Vendors, Approved POs, Invoices Processed, Pending Reviews), interactive 4-step pipeline stepper, attention queue, and live activity streams.*
+
+---
+
+### 2. Invoice Verification Workspace
+![FinTrust AI Verification Workspace](docs/screenshots/invoice-verification.png)
+*Three-pane verification workspace displaying document intake & presets (left), side-by-side purchase order baseline comparison with integer-paise precision (center), and statutory India GST Integrity Engine analysis (right).*
+
+---
+
+### 3. Clean Invoice Verification — `APPROVE`
+![Clean Invoice Verification Approved](docs/screenshots/clean-approval.png)
+*Deterministic `APPROVE` decision for a valid intra-state invoice (`PO-1001`): exact ₹0 variance across total and GST, verified vendor bank reference, valid Luhn mod 36 GSTIN checksums, and matching CGST + SGST classification.*
+
+---
+
+### 4. GST Discrepancy & Tax Mismatch — `HOLD`
+![GST Mismatch Verification Held](docs/screenshots/gst-mismatch-hold.png)
+*Automated `HOLD` decision catching an inter-state transaction misclassified with intra-state CGST + SGST instead of IGST, flagging itemized component variances and preventing statutory tax filing non-compliance.*
+
+---
+
+### 5. Risk Monitoring & Flagged Queue
+![Risk Monitoring Dashboard](docs/screenshots/risk-monitoring.png)
+*Operational risk monitoring workspace filtering invoices by risk severity (High, Medium, Low), displaying variance drivers, and linking directly to human investigation queues.*
+
+---
+
+### 6. Application-Level Audit Trail
+![Audit Trail Activity Ledger](docs/screenshots/audit-trail.png)
+*Append-only audit ledger recording every approval, discrepancy hold, and duplicate invoice attempt with India Standard Time (IST) timestamps and auditable decision rationales.*
+
+---
+
 ## 📌 Executive Summary & Problem Statement
 
 Indian Micro, Small, and Medium Enterprises (MSMEs) process hundreds of physical and digital invoices each month across multiple operational workflows. Accounts payable and finance teams routinely face four critical operational risks:
