@@ -1,6 +1,6 @@
 {
   "evaluation_mode": "LIVE_PROVIDER_EVALUATION",
-  "run_timestamp": "2026-11-21T10:22:08Z",
+  "run_timestamp": "2026-11-21T14:16:51Z",
   "status": "SKIPPED",
   "reason": "OPENROUTER_API_KEY environment variable is not configured.",
   "configured_model": "openrouter/free",
@@ -19,7 +19,7 @@
       "ocr_applied": false,
       "ocr_engine": null,
       "text_length": 566,
-      "extraction_time_seconds": 0.0068,
+      "extraction_time_seconds": 0.0156,
       "suspicious_patterns_detected": false,
       "suspicious_warnings": []
     },
@@ -31,7 +31,7 @@
       "ocr_applied": true,
       "ocr_engine": "RapidOCR",
       "text_length": 224,
-      "extraction_time_seconds": 4.1685,
+      "extraction_time_seconds": 5.6747,
       "suspicious_patterns_detected": false,
       "suspicious_warnings": []
     },
@@ -43,7 +43,7 @@
       "ocr_applied": false,
       "ocr_engine": null,
       "text_length": 676,
-      "extraction_time_seconds": 0.0085,
+      "extraction_time_seconds": 0.027,
       "suspicious_patterns_detected": true,
       "suspicious_warnings": [
         "Suspicious instruction pattern identified: 'IGNORE PREVIOUS INSTRUCTIONS'. Document content may contain prompt-injection attempts.",

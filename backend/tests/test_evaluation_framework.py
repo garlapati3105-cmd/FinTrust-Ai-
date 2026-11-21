@@ -51,26 +51,6 @@ def eval_db(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", test_db)
     database.initialize_database(test_db)
     seed_database(test_db)
-
-    # These evaluation tests exercise the legacy seven-field verification flow.
-    # GST-required behaviour is covered by test_gst_integrity.py.
-    with database.get_connection(test_db) as connection:
-        connection.execute(
-            "UPDATE vendors SET gstin = NULL, gstin_verification_status = 'NOT_VERIFIED'"
-        )
-        connection.execute(
-            """
-            UPDATE purchase_orders
-            SET recipient_gstin = NULL,
-                place_of_supply_state_code = NULL,
-                gst_transaction_profile = 'NOT_CONFIGURED',
-                approved_cgst_paise = 0,
-                approved_sgst_paise = 0,
-                approved_utgst_paise = 0,
-                approved_igst_paise = 0,
-                approved_cess_paise = 0
-            """
-        )
     return test_db
 
 

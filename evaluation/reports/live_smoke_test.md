@@ -1,6 +1,6 @@
 # FinTrust AI — Live OpenRouter Model Validation Report
 
-- **Run Timestamp:** 2026-11-21T10:22:08Z
+- **Run Timestamp:** 2026-11-21T14:16:51Z
 - **Evaluation Mode:** LIVE_PROVIDER_EVALUATION
 - **Execution Status:** `SKIPPED`
 - **Configured Model:** `openrouter/free`
@@ -42,9 +42,9 @@ While external model invocation was skipped, the underlying document ingestion, 
 
 | Document ID | Filename | Format | Page Count | OCR Applied | Engine | Text Length | Extraction Time | Suspicious Directives |
 |---|---|---|---|---|---|---|---|---|
-| `INV-EVAL-001` | `INV-EVAL-001.pdf` | PDF | 1 | False | Native PDF | 566 chars | 0.0068s | None |
-| `INV-EVAL-031` | `INV-EVAL-031.pdf` | PDF | 1 | True | RapidOCR | 224 chars | 4.1685s | None |
-| `INV-EVAL-022` | `INV-EVAL-022.pdf` | PDF | 1 | False | Native PDF | 676 chars | 0.0085s | YES |
+| `INV-EVAL-001` | `INV-EVAL-001.pdf` | PDF | 1 | False | Native PDF | 566 chars | 0.0156s | None |
+| `INV-EVAL-031` | `INV-EVAL-031.pdf` | PDF | 1 | True | RapidOCR | 224 chars | 5.6747s | None |
+| `INV-EVAL-022` | `INV-EVAL-022.pdf` | PDF | 1 | False | Native PDF | 676 chars | 0.027s | YES |
 
 ### Pipeline Findings:
 1. **Clean Digital PDF (`INV-EVAL-001.pdf`)**: Native PyMuPDF text stream was extracted cleanly without OCR overhead in under 0.05s.
