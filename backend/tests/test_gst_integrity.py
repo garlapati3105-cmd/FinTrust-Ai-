@@ -905,3 +905,91 @@ def test_regression_rounding_tolerance_boundaries():
     assert f_neg101 is not None
     assert f_neg101.finding_code == "gst_component_sum_mismatch"
 
+
+def test_clean_intra_state_po_1001_approval_and_gst_checks_payload(client):
+    """
+    P0 Clean Demo Validation:
+    Verify that preset 'Intra-State Clean (PO-1001)' receives APPROVE and returns
+    full enriched gst_checks payload consumable by the frontend UI cards.
+    """
+    payload = {
+        "invoice_number": "INV-TEST-1001",
+        "vendor_name": "Aster Office Supplies",
+        "po_number": "PO-1001",
+        "invoice_total": "85000.00",
+        "gst_amount": "12966.10",
+        "line_items": 5,
+        "invoice_bank_account_ref": "DEMO-ACCT-1001",
+        "supplier_gstin": "27AAPCA1234A1Z5",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "6483.05",
+        "sgst_amount": "6483.05",
+        "cess_amount": "0.00",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["decision"] == "APPROVE"
+    assert data["risk_level"] == "low"
+    assert len(data["findings"]) == 0
+
+    gst_checks = data.get("gst_checks")
+    assert gst_checks is not None
+    assert gst_checks["gst_validation_status"] == "VALID"
+
+    tax_class = gst_checks["tax_classification"]
+    assert tax_class["status"] == "MATCH"
+    assert tax_class["expected"] == "CGST + SGST"
+    assert tax_class["observed"] == "CGST + SGST"
+    assert tax_class["supplier_state"] == "27"
+    assert tax_class["place_of_supply"] == "27"
+
+    comps = gst_checks["components"]
+    assert comps["within_tolerance"] is True
+    assert comps["difference_paise"] == 0
+    assert comps["sum_components_paise"] == 1296610
+    assert comps["declared_gst_paise"] == 1296610
+    assert comps["cgst_paise"] == 648305
+    assert comps["sgst_paise"] == 648305
+
+
+def test_inter_state_tax_type_mismatch_po_1002_hold_and_gst_checks_payload(client):
+    """
+    P0 Mismatch Demo Validation:
+    Verify that preset 'Tax Type Mismatch (Inter-State)' receives HOLD and returns
+    enriched gst_checks indicating INVALID and tax_classification MISMATCH.
+    """
+    payload = {
+        "invoice_number": "INV-TEST-1006",
+        "vendor_name": "BluePeak Technologies",
+        "po_number": "PO-1002",
+        "invoice_total": "120000.00",
+        "gst_amount": "18305.08",
+        "line_items": 8,
+        "invoice_bank_account_ref": "DEMO-ACCT-1002",
+        "supplier_gstin": "29ABCDE1234F1ZW",
+        "recipient_gstin": "27AABCF1234F1Z4",
+        "place_of_supply_state_code": "27",
+        "cgst_amount": "9152.54",
+        "sgst_amount": "9152.54",
+        "cess_amount": "0.00",
+    }
+    response = client.post("/api/verify-invoice", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["decision"] == "HOLD"
+    assert data["risk_level"] == "high"
+
+    gst_checks = data.get("gst_checks")
+    assert gst_checks is not None
+    assert gst_checks["gst_validation_status"] == "INVALID"
+    assert any("prohibited" in f["finding_code"] or f["field_name"] == "tax_type" for f in gst_checks["findings"])
+
+    tax_class = gst_checks["tax_classification"]
+    assert tax_class["status"] == "MISMATCH"
+    assert tax_class["expected"] == "IGST"
+    assert tax_class["observed"] == "CGST + SGST"
+

@@ -286,8 +286,73 @@ class GSTIntegrityReport:
     overall_status: str = STATUS_PASS
     requires_hold: bool = False
     requires_manual_review: bool = False
+    invoice_components: dict[str, int] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
+        # Determine human/UI friendly status
+        if self.overall_status == STATUS_PASS:
+            ui_status = "VALID"
+        elif self.requires_hold or self.overall_status == STATUS_MISMATCH:
+            ui_status = "INVALID"
+        else:
+            ui_status = "REVIEW_REQUIRED"
+
+        # Determine tax classification UI details
+        tax_class = self.tax_classification_result
+        tax_type = tax_class.get("tax_type", "UNKNOWN")
+        expected_comps = tax_class.get("expected_components", [])
+        expected_str = " + ".join(expected_comps) if expected_comps else ("IGST" if tax_type == "INTER_STATE" else "CGST + SGST")
+
+        has_tax_mismatch = any(
+            f.field_name == "tax_type" or "prohibited" in f.finding_code or f.finding_code == "missing_mandatory_igst"
+            for f in self.findings
+        )
+        tax_class_status = "MISMATCH" if has_tax_mismatch else ("MATCH" if tax_class.get("status") == STATUS_PASS else "PENDING")
+
+        inv_comps = self.invoice_components or {}
+        obs_comps = []
+        if inv_comps.get("igst", 0) > 0:
+            obs_comps.append("IGST")
+        if inv_comps.get("cgst", 0) > 0:
+            obs_comps.append("CGST")
+        if inv_comps.get("sgst", 0) > 0:
+            obs_comps.append("SGST")
+        if inv_comps.get("utgst", 0) > 0:
+            obs_comps.append("UTGST")
+        observed_str = " + ".join(obs_comps) if obs_comps else ("CGST + SGST" if tax_type == "INTRA_STATE" else "IGST")
+
+        supp_res = self.supplier_gstin_result
+        pos_res = self.place_of_supply_result
+        supp_state = supp_res.get("validation", {}).get("state_code") if supp_res.get("validation") else None
+        supp_state_name = supp_res.get("validation", {}).get("state_name") if supp_res.get("validation") else None
+        pos_code = pos_res.get("invoice_pos") or pos_res.get("po_pos")
+        pos_info = STATE_CATALOGUE.get(pos_code, {}) if pos_code else {}
+
+        ui_tax_classification = {
+            "status": tax_class_status,
+            "expected": expected_str,
+            "observed": observed_str,
+            "supplier_state": supp_state,
+            "supplier_state_name": supp_state_name,
+            "place_of_supply": pos_code,
+            "pos_state_name": pos_info.get("name"),
+            "is_union_territory": pos_info.get("is_ut", False),
+            "explanation": tax_class.get("explanation", ""),
+        }
+
+        recon = self.component_reconciliation_result
+        ui_components = {
+            "cgst_paise": inv_comps.get("cgst", 0),
+            "sgst_paise": inv_comps.get("sgst", 0),
+            "utgst_paise": inv_comps.get("utgst", 0),
+            "igst_paise": inv_comps.get("igst", 0),
+            "cess_paise": inv_comps.get("cess", 0),
+            "declared_gst_paise": recon.get("declared_total_paise", 0),
+            "sum_components_paise": recon.get("component_sum_paise", 0),
+            "difference_paise": recon.get("variance_paise", 0),
+            "within_tolerance": recon.get("within_tolerance", True),
+        }
+
         return {
             "supplier_gstin_result": self.supplier_gstin_result,
             "recipient_gstin_result": self.recipient_gstin_result,
@@ -299,6 +364,9 @@ class GSTIntegrityReport:
             "requires_hold": self.requires_hold,
             "requires_manual_review": self.requires_manual_review,
             "disclaimer": GSTIN_LEGAL_DISCLAIMER,
+            "gst_validation_status": ui_status,
+            "tax_classification": ui_tax_classification,
+            "components": ui_components,
         }
 
 
@@ -1453,4 +1521,5 @@ def evaluate_gst_integrity(
         overall_status=overall_status,
         requires_hold=requires_hold,
         requires_manual_review=requires_manual_review,
+        invoice_components=invoice_components,
     )

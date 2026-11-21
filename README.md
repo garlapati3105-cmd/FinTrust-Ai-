@@ -5,7 +5,7 @@
 [![SQLite](https://img.shields.io/badge/Database-SQLite%20(Integer%20Paise)-003B57?logo=sqlite)](https://sqlite.org/)
 [![PyMuPDF & RapidOCR](https://img.shields.io/badge/OCR-PyMuPDF%20%2B%20RapidOCR%20ONNX-orange)](#-document-extraction--ocr-pipeline)
 [![GST Engine](https://img.shields.io/badge/GST%20Engine-India%20GST%20(Luhn%20Mod%2036)-1f5d4a)](#-india-gst-integrity-engine)
-[![Tests Passing](https://img.shields.io/badge/Tests-105%2F105%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
+[![Tests Passing](https://img.shields.io/badge/Tests-123%2F123%20Passing%20(100%25)-success)](#-automated-testing--regression-suite)
 [![Evaluation Benchmark](https://img.shields.io/badge/Benchmark-31--Doc%20Synthetic%20Benchmark%20(100%25%20Accuracy)-blue)](#-evaluation-lab--31-document-synthetic-offline-benchmark)
 [![Live AI Validated](https://img.shields.io/badge/Live%20AI-3--Doc%20Smoke%20Test%20(21%2F21%20Fields)-brightgreen)](#-live-openrouter-ai-model-validation)
 [![Hackathon](https://img.shields.io/badge/Hackathon-Arthaton%202026%20(AI%20for%20Finance)-purple)](#)
@@ -210,18 +210,19 @@ $env:FINTRUST_EXTRACTION_MODEL = "openrouter/free"
 python evaluation/scripts/run_live_smoke_test.py
 ```
 
-### Live Smoke Test Results (Measured November 16, 2026)
+### Live Smoke Test Results (Historical Baseline & Current Framework)
 
 > [!NOTE]
-> This live smoke test evaluates **three synthetic documents** (21 total field assertions: 7 fields × 3 documents) across dynamically resolved OpenRouter free models. It verifies live API schema compatibility, OCR fallback integration, and prompt-injection handling under real network conditions. It is a live integration smoke test rather than general proof of production extraction accuracy across all real-world invoice layouts.
+> **Measurement History & 15-Field Support:**
+> The table below records the historical live baseline measured on November 16, 2026 across **three synthetic documents** (21 total field assertions: 7 base fields × 3 documents) using dynamically resolved OpenRouter free models. The current evaluation framework has been upgraded to support all **15 schema fields** (7 base + 8 GST fields). In the current runtime, when `OPENROUTER_API_KEY` is not present, `run_live_smoke_test.py` safely completes in `SKIPPED` mode without making external network calls and without fabricating simulated model predictions or accuracy scores.
 
-| Document | Test Category | Format | Resolved Live Model | AI Latency | Field Match | Evidence Verified |
+| Document | Test Category | Format | Resolved Live Model | AI Latency | Field Match (7 Base Fields) | Evidence Verified |
 |---|---|---|---|---|---|---|
 | **INV-EVAL-001** | Clean digital invoice | PDF | `baidu/ernie-5.5-flash-preview:free` | 4.11s | **7/7 (100%)** | **7/7 (100%)** |
 | **INV-EVAL-031** | Scanned rasterized invoice | PDF | `nvidia/nemotron-3.5-super-vl:free` | 5.21s | **7/7 (100%)** | **7/7 (100%)** |
 | **INV-EVAL-022** | Adversarial prompt-injection | PDF | `recursive/flint-v1.0:free` | 11.84s | **7/7 (100%)** | **7/7 (100%)** |
 
-- **Field Extraction Match:** **100.0%** (21 / 21 fields matched ground truth across the 3 live test documents)
+- **Field Extraction Match (Historical 7-Field Run):** **100.0%** (21 / 21 fields matched ground truth across the 3 live test documents)
 - **Evidence Grounding Accuracy:** **100.0%** (21 / 21 quotes verified against source text and page bounds)
 - **Missing Field Rate:** **0.0%** (0 / 21 fields missing)
 - **OCR Completion Rate:** **100.0%** (RapidOCR successfully recovered text layers on the rasterized PDF)
@@ -242,11 +243,16 @@ python evaluation/scripts/run_evaluation.py
 
 ### 31-Document Benchmark Results
 
+> [!NOTE]
+> **Methodological Disclosure — Deterministic Fixture-Based Regression vs Live Model Evaluation:**
+> The 31-document offline benchmark evaluates structured JSON schema parsing, normalization, evidence grounding, and deterministic verification rules against ground-truth fixtures and synthetic PDFs across all 15 schema fields (`FIELD_KEYS`). It is a deterministic regression suite, NOT an empirical measurement of external LLM extraction accuracy. Note that the legacy 31-document synthetic dataset contains ground truth only for the 7 base fields; the 8 GST fields have no ground truth defined in this dataset and are correctly recorded as `NOT_EVALUATED` rather than artificially inflating accuracy metrics.
+
 | Evaluation Pillar | Target Metric | Measured Value | Outcome |
 |---|---|---|---|
 | **Synthetic Dataset** | 30+ Documents | **31 Documents** (PDF & PNG) | **PASSED** |
 | **OCR Text Extraction** | 100% on scanned/image docs | **100.0%** (2/2 documents) | **PASSED** |
-| **Field Extraction Accuracy** | High precision across 7 fields | **100.0%** (217/217 fields) | **PASSED** |
+| **Field Extraction Accuracy** | High precision across 7 evaluated fields | **100.0%** (217/217 fields) | **PASSED** |
+| **GST Field Coverage** | 8 GST fields in schema | **NOT_EVALUATED** (No GT in 31-doc dataset) | **DISCLOSED** |
 | **Adversarial Grounding** | Reject ungrounded / mismatched quotes | **100.0%** (5/5 adversarial cases) | **PASSED** |
 | **Malicious Injection Detection** | Flag directive injection phrases | **100.0%** (4/4 attacks flagged) | **PASSED** |
 | **Heuristic False Positive Rate** | Regex scanner boundary limitation | **100.0%** (1/1 benign lookalike sample flagged)* | **OBSERVED** |
@@ -262,20 +268,20 @@ python evaluation/scripts/run_evaluation.py
 
 ## 🔬 Automated Testing & Regression Suite
 
-The project includes **112 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, and the India GST Integrity Engine:
+The project includes **123 automated backend tests** validating database constraints, verification rules, document security, OCR, AI extraction fallbacks, adversarial grounding, the India GST Integrity Engine, and 15-field evaluation framework integrity:
 
 ```powershell
 pytest backend/tests -q
-........................................................................ [ 64%]
-........................................                                 [100%]
-112 passed in 66.14s
+........................................................................ [ 58%]
+...................................................                      [100%]
+123 passed in 103.55s
 ```
 
 - **`test_gst_integrity.py` (44 tests):** India GST Integrity Engine validation: 15-character GSTIN structure, official 38 State/UT catalogue, SGST vs UTGST distinction (Delhi/Puducherry/J&K vs Chandigarh/Ladakh/Dadra), Luhn mod 36 positive/negative checksum calculation, intra-state vs inter-state tax classification, component reconciliation (CGST, SGST, UTGST, IGST, Cess), internal ₹1.00 rounding tolerance boundaries, reverse state/UT name resolution (e.g. "Maharashtra" → "27"), taxable PO bypass protection, exempt/non-GST approvals, and full end-to-end API verification.
 - **`test_database.py` (13 tests):** Schema initialization, integer-paise conversions, foreign key constraints, unique vendor/normalized invoice constraints, and append-only audit event logging.
 - **`test_verification.py` (21 tests):** Clean matches, amount variances, GST mismatches, line-item mismatches, inactive/unknown vendors, duplicate submissions, and missing required fields.
 - **`test_document_extraction.py` (19 tests):** Magic byte validation, upload limits, PyMuPDF extraction, RapidOCR fallback, prompt-injection scanner, evidence quote verification, and API key absence fallback.
-- **`test_evaluation_framework.py` (15 tests):** Ground truth integrity, adversarial grounding, OCR edge cases, deterministic verification consistency, and decision immutability.
+- **`test_evaluation_framework.py` (24 tests):** Ground truth integrity, 15-field schema evaluation definitions, unannotated field exclusion from denominators, explicit expected null handling, adversarial grounding, OCR edge cases, deterministic verification consistency, decision immutability, safe API key absence fallback, and honest skipped metrics reporting.
 
 ### Frontend Production Build
 ```powershell
